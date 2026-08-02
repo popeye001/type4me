@@ -14,11 +14,15 @@ final class DemoState {
     @ObservationIgnored let audioLevel = AudioLevelMeter()
     var currentMode: ProcessingMode = .direct
     var feedbackMessage: String = L("已完成", "Done")
+    var feedbackKind: FeedbackKind = .standard
     var processingFinishTime: Date?
     var recordingStartDate: Date?
 
     var transcriptionText: String {
         segments.map(\.text).joined()
+    }
+    var effectiveProcessingLabel: String {
+        currentMode.processingLabel
     }
 
     // MARK: Private
@@ -129,4 +133,6 @@ final class DemoState {
 
 // MARK: - FloatingBarState Conformance
 
-extension DemoState: FloatingBarState {}
+extension DemoState: FloatingBarState {
+    var isQwen3OnlyMode: Bool { false }
+}

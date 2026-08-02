@@ -5,6 +5,13 @@ struct BaiduASRConfig: ASRProviderConfig, Sendable {
     static let provider = ASRProvider.baidu
     static let displayName = L("百度智能云", "Baidu AI Cloud")
     static let defaultDevPID = "15372"
+    static let devPIDOptions = [
+        FieldOption(value: "15372", label: L("15372 中文增强标点", "15372 Chinese enhanced punctuation")),
+        FieldOption(value: "1537", label: L("1537 中文弱标点", "1537 Chinese weak punctuation")),
+        FieldOption(value: "15376", label: L("15376 中文多方言弱标点", "15376 Chinese multi-dialect weak punctuation")),
+        FieldOption(value: "17372", label: L("17372 英文增强标点", "17372 English enhanced punctuation")),
+        FieldOption(value: "1737", label: L("1737 英文无标点", "1737 English no punctuation")),
+    ]
 
     static var credentialFields: [CredentialField] {[
         CredentialField(
@@ -29,7 +36,8 @@ struct BaiduASRConfig: ASRProviderConfig, Sendable {
             placeholder: defaultDevPID,
             isSecure: false,
             isOptional: true,
-            defaultValue: defaultDevPID
+            defaultValue: defaultDevPID,
+            options: devPIDOptions
         ),
         CredentialField(
             key: "cuid",

@@ -58,6 +58,7 @@ enum TF {
     static let settingsAccentGreen = Color(red: 0.30, green: 0.62, blue: 0.35)
     static let settingsAccentAmber = Color(red: 0.78, green: 0.55, blue: 0.15)
     static let settingsAccentRed = Color(red: 0.80, green: 0.28, blue: 0.22)
+    static let settingsAccentBlue = Color(red: 0.20, green: 0.45, blue: 0.75)
 
     // MARK: Spacing
 
@@ -79,6 +80,12 @@ enum TF {
     static let barWidthCompact: CGFloat = 200
     static let barHeight: CGFloat = 52
     static let barBottomOffset: CGFloat = 48
+
+    // MARK: Transcript Popup (hover preview above bar)
+
+    static let transcriptPopupMaxHeight: CGFloat = 400
+    static let transcriptPopupCorner: CGFloat = 14
+    static let transcriptPopupGap: CGFloat = 8
 
     // MARK: Animation
 

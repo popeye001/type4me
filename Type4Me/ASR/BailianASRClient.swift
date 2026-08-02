@@ -62,13 +62,13 @@ actor BailianASRClient: SpeechRecognizer {
         eventContinuation = continuation
         _events = stream
 
-        var request = URLRequest(url: BailianProtocol.endpoint)
+        var request = URLRequest(url: BailianProtocol.endpoint(for: bailianConfig))
         request.setValue("Bearer \(bailianConfig.apiKey)", forHTTPHeaderField: "Authorization")
 
         let taskID = UUID().uuidString.lowercased()
         let gate = BailianTaskStartGate()
         let delegate = BailianWebSocketDelegate(taskStartGate: gate)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let session = URLSession(configuration: options.urlSessionConfiguration, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: request)
         task.resume()
 
@@ -96,8 +96,8 @@ actor BailianASRClient: SpeechRecognizer {
 
     func sendAudio(_ data: Data) async throws {
         guard let task = webSocketTask else { return }
-        audioPacketCount += 1
         try await task.send(.data(data))
+        audioPacketCount += 1
     }
 
     func endAudio() async throws {
@@ -263,7 +263,7 @@ private actor BailianTaskStartGate {
     }
 }
 
-private final class BailianWebSocketDelegate: NSObject, URLSessionWebSocketDelegate {
+private final class BailianWebSocketDelegate: NSObject, URLSessionWebSocketDelegate, URLSessionTaskDelegate {
 
     private let taskStartGate: BailianTaskStartGate
 
@@ -286,6 +286,17 @@ private final class BailianWebSocketDelegate: NSObject, URLSessionWebSocketDeleg
                     reason: reasonText
                 )
             )
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        guard let error else { return }
+        Task {
+            await taskStartGate.markFailure(error)
         }
     }
 }

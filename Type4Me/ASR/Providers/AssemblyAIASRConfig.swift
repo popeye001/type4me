@@ -4,18 +4,19 @@ struct AssemblyAIASRConfig: ASRProviderConfig, Sendable {
 
     static let provider = ASRProvider.assemblyai
     static let displayName = "AssemblyAI"
-    static let defaultModel = "universal-streaming-multilingual"
+    static let defaultModel = "universal-3-5-pro"
     static let supportedModels = [
+        "universal-3-5-pro",
+        "u3-rt-pro",
         "universal-streaming-multilingual",
         "universal-streaming-english",
-        "u3-rt-pro",
     ]
 
     static var credentialFields: [CredentialField] {[
         CredentialField(
             key: "apiKey",
             label: "API Key",
-            placeholder: "aa_...",
+            placeholder: L("粘贴 API Key", "Paste your API Key"),
             isSecure: true,
             isOptional: false,
             defaultValue: ""
@@ -26,7 +27,8 @@ struct AssemblyAIASRConfig: ASRProviderConfig, Sendable {
             placeholder: defaultModel,
             isSecure: false,
             isOptional: false,
-            defaultValue: defaultModel
+            defaultValue: defaultModel,
+            options: supportedModels.map { FieldOption(value: $0, label: $0) }
         ),
     ]}
 

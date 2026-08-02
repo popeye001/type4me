@@ -51,17 +51,24 @@ final class FloatingBarController {
     private let panel: FloatingBarPanel
     private let state: AppState
     private let panelSize: NSSize
+    private var panelGeneration = 0
 
     init(state: AppState) {
         self.state = state
 
         let inset: CGFloat = 16  // extra room for shadow/glow
-        let frame = NSRect(x: 0, y: 0, width: TF.barWidth + inset * 2, height: TF.barHeight + inset * 2)
+        let contentHeight = TF.barHeight + TF.transcriptPopupGap + TF.transcriptPopupMaxHeight
+        let frame = NSRect(x: 0, y: 0, width: TF.barWidth + inset * 2, height: contentHeight + inset * 2)
         panelSize = frame.size
         panel = FloatingBarPanel(contentRect: frame)
 
         let barView = FloatingBarView<AppState>(state: state)
         let hosting = NSHostingView(rootView: barView)
+        // This panel has a deliberately fixed canvas. Letting NSHostingView
+        // propagate a long hover transcript back into the NSWindow's content
+        // size can recursively invalidate AppKit constraints during layout and
+        // abort the process. SwiftUI lays out strictly inside `hosting.frame`.
+        hosting.sizingOptions = []
         hosting.layer?.backgroundColor = .clear
         hosting.frame = NSRect(origin: .zero, size: frame.size)
         hosting.autoresizingMask = [.width, .height]
@@ -75,6 +82,9 @@ final class FloatingBarController {
     }
 
     func show() {
+        panelGeneration &+= 1
+
+        panel.contentView?.layer?.removeAllAnimations()
         panel.setContentSize(panelSize)
         panel.setFrame(NSRect(origin: panel.frame.origin, size: panelSize), display: false)
         panel.positionAtBottomCenter()
@@ -88,13 +98,16 @@ final class FloatingBarController {
     }
 
     func hide() {
+        guard panel.isVisible else { return }
+        let expectedGeneration = panelGeneration
         let panelRef = panel
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.25
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panelRef.animator().alphaValue = 0
-        }, completionHandler: {
+        }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
+                guard let self, self.panelGeneration == expectedGeneration else { return }
                 panelRef.orderOut(nil)
             }
         })

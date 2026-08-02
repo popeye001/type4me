@@ -5,6 +5,7 @@ import Foundation
 enum ASRProvider: String, CaseIterable, Codable, Sendable {
     // Local
     case sherpa
+    case apple
     // International
     case openai
     case azure
@@ -12,6 +13,7 @@ enum ASRProvider: String, CaseIterable, Codable, Sendable {
     case aws
     case deepgram
     case assemblyai
+    case elevenlabs
     case soniox
     // China
     case volcano
@@ -20,18 +22,24 @@ enum ASRProvider: String, CaseIterable, Codable, Sendable {
     case tencent
     case baidu
     case iflytek
+    #if HAS_CLOUD_SUBSCRIPTION
+    // Cloud proxy (Type4Me Cloud subscription)
+    case cloud
+    #endif
     // Fallback
     case custom
 
     var displayName: String {
         switch self {
-        case .sherpa:   return L("本地识别 (Paraformer)", "Local (Paraformer)")
+        case .sherpa:   return L("SenseVoice 流式 + Qwen3 ASR 校准", "SenseVoice Streaming + Qwen3 ASR")
+        case .apple:    return "Apple Speech"
         case .openai:   return "OpenAI"
         case .azure:    return "Azure Speech"
         case .google:   return "Google Cloud STT"
         case .aws:      return "AWS Transcribe"
         case .deepgram: return "Deepgram"
         case .assemblyai: return "AssemblyAI"
+        case .elevenlabs: return "ElevenLabs"
         case .soniox:   return "Soniox"
         case .volcano:  return L("火山引擎 (Doubao)", "Volcano (Doubao)")
         case .aliyun:   return L("阿里云", "Alibaba Cloud")
@@ -39,6 +47,9 @@ enum ASRProvider: String, CaseIterable, Codable, Sendable {
         case .tencent:  return L("腾讯云", "Tencent Cloud")
         case .baidu:    return L("百度智能云", "Baidu AI Cloud")
         case .iflytek:  return L("讯飞", "iFLYTEK")
+        #if HAS_CLOUD_SUBSCRIPTION
+        case .cloud:    return "Type4Me Cloud"
+        #endif
         case .custom:   return L("自定义", "Custom")
         }
     }
@@ -63,10 +74,16 @@ struct CredentialField: Sendable, Identifiable {
     let defaultValue: String
     /// When non-empty, the UI renders a Picker instead of a TextField.
     let options: [FieldOption]
+    /// When true (and options is non-empty), the picker includes a "Custom" entry
+    /// that reveals a text field for free-form input.
+    let allowCustomInput: Bool
+
+    /// Sentinel value used in the picker to represent "custom input" mode.
+    static let customValue = "_custom"
 
     var id: String { key }
 
-    init(key: String, label: String, placeholder: String, isSecure: Bool, isOptional: Bool, defaultValue: String, options: [FieldOption] = []) {
+    init(key: String, label: String, placeholder: String, isSecure: Bool, isOptional: Bool, defaultValue: String, options: [FieldOption] = [], allowCustomInput: Bool = false) {
         self.key = key
         self.label = label
         self.placeholder = placeholder
@@ -74,6 +91,7 @@ struct CredentialField: Sendable, Identifiable {
         self.isOptional = isOptional
         self.defaultValue = defaultValue
         self.options = options
+        self.allowCustomInput = allowCustomInput
     }
 }
 

@@ -1,0 +1,3 @@
+doubaoime-asr
+fastapi
+uvicorn[standard]

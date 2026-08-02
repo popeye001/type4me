@@ -4,6 +4,17 @@ import os
 actor ClaudeChatClient: LLMClient {
 
     private let logger = Logger(subsystem: "com.type4me.llm", category: "ClaudeChatClient")
+    private let session: URLSession
+    private let metricsDelegate: LLMURLSessionMetricsDelegate
+
+    init(bypassProxy: Bool = ProxyBypassMode.current.bypassLLM) {
+        let resources = LLMURLSessionFactory.make(
+            providerID: LLMProvider.claude.rawValue,
+            bypassProxy: bypassProxy
+        )
+        session = resources.session
+        metricsDelegate = resources.metricsDelegate
+    }
 
     /// Pre-establish TCP+TLS connection so the first real request skips handshake.
     func warmUp(baseURL: String) async {
@@ -11,8 +22,12 @@ actor ClaudeChatClient: LLMClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 5
-        _ = try? await URLSession.shared.data(for: request)
+        _ = try? await session.data(for: request)
         logger.info("Claude connection pre-warmed to \(baseURL)")
+    }
+
+    func invalidate() async {
+        session.invalidateAndCancel()
     }
 
     /// Process text through Anthropic Messages API (streaming).
@@ -43,7 +58,7 @@ actor ClaudeChatClient: LLMClient {
 
         logger.info("Claude request: \(text.count) chars, model=\(config.model)")
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw LLMError.requestFailed(0)
         }
@@ -68,6 +83,15 @@ actor ClaudeChatClient: LLMClient {
                 }
             case "message_stop":
                 break
+            case "error":
+                let detail = event.error?.message ?? "unknown"
+                logger.error("Claude SSE error event: \(detail)")
+                throw LLMError.requestFailed(-1)
+            case "message_delta":
+                if let stopReason = event.delta?.stop_reason, stopReason == "error" {
+                    logger.error("Claude message_delta stop_reason=error")
+                    throw LLMError.requestFailed(-1)
+                }
             default:
                 continue
             }
@@ -99,8 +123,15 @@ private struct ClaudeMessage: Encodable, Sendable {
 private struct ClaudeStreamEvent: Decodable, Sendable {
     let type: String
     let delta: ClaudeDelta?
+    let error: ClaudeErrorDetail?
 }
 
 private struct ClaudeDelta: Decodable, Sendable {
     let text: String?
+    let stop_reason: String?
+}
+
+private struct ClaudeErrorDetail: Decodable, Sendable {
+    let type: String?
+    let message: String?
 }

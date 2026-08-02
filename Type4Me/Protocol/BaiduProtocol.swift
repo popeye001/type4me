@@ -46,14 +46,19 @@ enum BaiduProtocol {
         config: BaiduASRConfig,
         options: ASRRequestOptions
     ) -> String {
+        let effectivePID = effectiveDevPID(from: config.devPID, enablePunc: options.enablePunc)
         var data: [String: Any] = [
             "appid": config.appID,
             "appkey": config.apiKey,
-            "dev_pid": effectiveDevPID(from: config.devPID, enablePunc: options.enablePunc),
+            "dev_pid": effectivePID,
             "cuid": config.cuid,
             "format": "pcm",
             "sample": 16000,
         ]
+
+        if effectivePID == 15376 {
+            data["user"] = config.cuid
+        }
 
         if let lmID = sanitized(config.lmID) {
             data["lm_id"] = lmID

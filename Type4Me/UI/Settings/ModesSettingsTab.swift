@@ -30,26 +30,29 @@ struct ModesSettingsTab: View {
 
             HStack(alignment: .top, spacing: 0) {
                 // Left: mode list (all modes)
-                VStack(spacing: 3) {
-                    ForEach(modes) { mode in
-                        modeRow(mode)
-                    }
-
-                    HStack(spacing: 6) {
-                        Button(action: addMode) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 11))
-                                Text(L("添加模式", "Add mode"))
-                                    .font(.system(size: 11, weight: .medium))
-                            }
-                            .foregroundStyle(TF.settingsTextTertiary)
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 3) {
+                        ForEach(modes) { mode in
+                            modeRow(mode)
                         }
-                        .buttonStyle(.plain)
-                        Spacer()
+
+                        HStack(spacing: 6) {
+                            Button(action: addMode) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 11))
+                                    Text(L("添加模式", "Add mode"))
+                                        .font(.system(size: 11, weight: .medium))
+                                }
+                                .foregroundStyle(TF.settingsTextTertiary)
+                            }
+                            .buttonStyle(.plain)
+                            Spacer()
+                        }
+                        .padding(.top, 8)
                     }
-                    .padding(.top, 8)
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 .frame(width: 320)
                 .padding(.trailing, 16)
 
@@ -60,20 +63,23 @@ struct ModesSettingsTab: View {
                     .padding(.vertical, 4)
 
                 // Right: detail for selected mode
-                Group {
-                    if let mode = selectedMode {
-                        modeDetail(mode)
-                    } else {
-                        Text(L("选择一个模式查看详情", "Select a mode to view details"))
-                            .font(.system(size: 12))
-                            .foregroundStyle(TF.settingsTextTertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScrollView(.vertical, showsIndicators: true) {
+                    Group {
+                        if let mode = selectedMode {
+                            modeDetail(mode)
+                        } else {
+                            Text(L("选择一个模式查看详情", "Select a mode to view details"))
+                                .font(.system(size: 12))
+                                .foregroundStyle(TF.settingsTextTertiary)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                     }
                 }
+                .scrollBounceBehavior(.basedOnSize)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(.leading, 16)
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             selectedASRProvider = KeychainService.selectedASRProvider
@@ -97,19 +103,43 @@ struct ModesSettingsTab: View {
                 target: target,
                 checkConflict: { code, mods in
                     guard let code else { return nil }
-                    let m = mods ?? 0
                     return modes.first { other in
-                        other.id != target.id &&
-                        other.hotkeyCode == code &&
-                        (other.hotkeyModifiers ?? 0) == m
+                        guard other.id != target.id,
+                              let otherCode = other.hotkeyCode
+                        else { return false }
+                        return ModeBinding.hotkeysAreEquivalent(
+                            keyCode: code,
+                            modifiers: mods,
+                            otherKeyCode: otherCode,
+                            otherModifiers: other.hotkeyModifiers
+                        )
+                    }
+                },
+                checkPrefixConflict: { code, mods in
+                    guard let code else { return nil }
+                    return modes.first { other in
+                        guard other.id != target.id,
+                              let otherCode = other.hotkeyCode
+                        else { return false }
+                        return ModeBinding.hasModifierPrefixConflict(
+                            keyCode: code,
+                            modifiers: mods,
+                            otherKeyCode: otherCode,
+                            otherModifiers: other.hotkeyModifiers
+                        )
                     }
                 },
                 onConfirm: { code, mods, style in
-                    let m = mods ?? 0
                     if let conflictIdx = modes.firstIndex(where: {
-                        $0.id != target.id &&
-                        $0.hotkeyCode == code &&
-                        ($0.hotkeyModifiers ?? 0) == m
+                        guard $0.id != target.id,
+                              let otherCode = $0.hotkeyCode
+                        else { return false }
+                        return ModeBinding.hotkeysAreEquivalent(
+                            keyCode: code,
+                            modifiers: mods,
+                            otherKeyCode: otherCode,
+                            otherModifiers: $0.hotkeyModifiers
+                        )
                     }) {
                         modes[conflictIdx].hotkeyCode = nil
                         modes[conflictIdx].hotkeyModifiers = nil
@@ -283,8 +313,10 @@ struct ModesSettingsTab: View {
 
     @ViewBuilder
     private func modeDetail(_ mode: ProcessingMode) -> some View {
-        if mode.isBuiltin {
+        if mode.isBuiltin && mode.id != ProcessingMode.formalWritingId {
             builtinModeDetail(mode)
+        } else if mode.id == ProcessingMode.formalWritingId {
+            formalWritingModeDetail(mode)
         } else {
             ModeDetailInner(mode: mode) { updated in
                 if let idx = modes.firstIndex(where: { $0.id == updated.id }) {
@@ -298,7 +330,7 @@ struct ModesSettingsTab: View {
     private func builtinModeDetail(_ mode: ProcessingMode) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 6) {
-                Image(systemName: "bolt.fill")
+                Image(systemName: builtinIcon(for: mode))
                     .font(.system(size: 14))
                     .foregroundStyle(TF.settingsAccentAmber)
                 Text(mode.name)
@@ -312,13 +344,119 @@ struct ModesSettingsTab: View {
                     .background(Capsule().fill(TF.settingsCardAlt))
             }
 
-            Text(L("直接使用语音识别 API，识别完成后不做处理、直接粘贴。适合非正式场合、无需纠正口头表达的场景，输入流程更丝滑。",
-                     "Uses the ASR API directly, pastes raw output without post-processing. Best for informal contexts where oral expressions don't need correction."))
+            if mode.id == ProcessingMode.macActionId {
+                macActionDescription
+            } else {
+                Text(L("直接使用语音识别 API，识别完成后不做处理、直接粘贴。适合非正式场合、无需纠正口头表达的场景，输入流程更丝滑。",
+                         "Uses the ASR API directly, pastes raw output without post-processing. Best for informal contexts where oral expressions don't need correction."))
+                    .font(.system(size: 12))
+                    .foregroundStyle(TF.settingsTextSecondary)
+                    .lineSpacing(3)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func builtinIcon(for mode: ProcessingMode) -> String {
+        switch mode.id {
+        case ProcessingMode.formalWritingId: return "wand.and.stars"
+        case ProcessingMode.macActionId: return "command.circle.fill"
+        default: return "bolt.fill"
+        }
+    }
+
+    private var macActionDescription: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L(
+                "用语音直接触发 macOS 操作，不再粘贴文本。需要先在「高级 → LLM」中配置 LLM 提供商。",
+                "Trigger macOS actions by voice instead of typing text. Requires an LLM provider configured under Advanced → LLM."
+            ))
                 .font(.system(size: 12))
                 .foregroundStyle(TF.settingsTextSecondary)
                 .lineSpacing(3)
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("支持的操作", "Supported actions"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsText)
+                ForEach(macActionExamples, id: \.0) { phrase, action in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•")
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextTertiary)
+                        Text("\u{201C}\(phrase)\u{201D}")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(TF.settingsText)
+                        Text("→")
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextTertiary)
+                        Text(action)
+                            .font(.system(size: 11))
+                            .foregroundStyle(TF.settingsTextSecondary)
+                    }
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+
+            Text(L(
+                "首次使用某些操作时，macOS 可能弹出「辅助功能 / 自动化」授权请求。未匹配到任何操作时会提示，不会粘贴任何文本。",
+                "macOS may ask for Accessibility/Automation permission the first time you use certain actions. When no action matches, you'll see a notice and nothing is typed."
+            ))
+                .font(.system(size: 11))
+                .foregroundStyle(TF.settingsTextTertiary)
+                .lineSpacing(2)
+        }
+    }
+
+    private var macActionExamples: [(String, String)] {
+        [
+            (L("打开 Safari", "Open Safari"),
+             L("启动应用", "Launch an app")),
+            (L("音量调到 30", "Set volume to 30"),
+             L("调节系统音量", "Adjust system volume")),
+            (L("亮度调到 80", "Set brightness to 80"),
+             L("调节屏幕亮度", "Adjust screen brightness")),
+            (L("切换深色模式", "Toggle dark mode"),
+             L("切换深色/浅色外观", "Switch dark/light appearance")),
+            (L("截图", "Take a screenshot"),
+             L("启动框选截图", "Start interactive screen capture")),
+            (L("复制 hello 到剪贴板", "Copy hello to clipboard"),
+             L("写入剪贴板", "Write to clipboard")),
+            (L("锁屏", "Lock screen"),
+             L("锁定屏幕", "Lock the screen")),
+            (L("搜一下 swiftui 教程", "Search SwiftUI tutorial"),
+             L("用浏览器搜索", "Open a web search")),
+            (L("查看电量", "Check battery"),
+             L("显示当前电量", "Show battery status")),
+            (L("最小化窗口", "Minimize window"),
+             L("最小化当前窗口", "Minimize the frontmost window")),
+            (L("全屏", "Fullscreen"),
+             L("切换当前窗口全屏", "Toggle fullscreen for frontmost window")),
+            (L("关闭窗口", "Close window"),
+             L("关闭当前窗口", "Close the frontmost window")),
+            (L("提醒我两分钟后检查邮件", "Remind me to check emails in 2 minutes"),
+             L("创建 Apple 提醒", "Create an Apple Reminder")),
+            (L("向下滚动", "Scroll down"),
+             L("向下翻页", "Page down")),
+            (L("向上滚动", "Scroll up"),
+             L("向上翻页", "Page up")),
+        ]
+    }
+
+    @AppStorage("tf_shortTextExemption") private var shortTextExemption = "0"
+
+    private func formalWritingModeDetail(_ mode: ProcessingMode) -> some View {
+        FormalWritingDetailInner(
+            mode: mode,
+            shortTextExemption: $shortTextExemption
+        ) { updated in
+            if let idx = modes.firstIndex(where: { $0.id == updated.id }) {
+                modes[idx] = updated
+                persistModes()
+            }
         }
     }
 
@@ -398,6 +536,7 @@ private struct HotkeyRecordingSheet: View {
 
     let target: RecordingTarget
     let checkConflict: (Int?, UInt64?) -> ProcessingMode?
+    let checkPrefixConflict: (Int?, UInt64?) -> ProcessingMode?
     let onConfirm: (Int, UInt64?, ProcessingMode.HotkeyStyle) -> Void
     let onCancel: () -> Void
 
@@ -413,11 +552,13 @@ private struct HotkeyRecordingSheet: View {
     init(
         target: RecordingTarget,
         checkConflict: @escaping (Int?, UInt64?) -> ProcessingMode?,
+        checkPrefixConflict: @escaping (Int?, UInt64?) -> ProcessingMode?,
         onConfirm: @escaping (Int, UInt64?, ProcessingMode.HotkeyStyle) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.target = target
         self.checkConflict = checkConflict
+        self.checkPrefixConflict = checkPrefixConflict
         self.onConfirm = onConfirm
         self.onCancel = onCancel
         _hotkeyStyle = State(initialValue: target.currentStyle)
@@ -425,6 +566,11 @@ private struct HotkeyRecordingSheet: View {
 
     private var conflict: ProcessingMode? {
         checkConflict(capturedKeyCode, capturedModifiers)
+    }
+
+    private var prefixConflict: ProcessingMode? {
+        guard conflict == nil else { return nil }
+        return checkPrefixConflict(capturedKeyCode, capturedModifiers)
     }
 
     var body: some View {
@@ -440,7 +586,7 @@ private struct HotkeyRecordingSheet: View {
                             .fill(TF.settingsAccentRed)
                             .frame(width: 8, height: 8)
                             .opacity(0.8)
-                        Text(L("按下快捷键...", "Press a key..."))
+                        Text(L("按下快捷键、鼠标或耳机按键...", "Press a key, mouse or headphone button..."))
                             .font(.system(size: 14))
                             .foregroundStyle(TF.settingsTextSecondary)
                     }
@@ -476,6 +622,20 @@ private struct HotkeyRecordingSheet: View {
                 .foregroundStyle(TF.settingsAccentAmber)
             }
 
+            if let prefixConflict {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                    Text(L(
+                        "与「\(prefixConflict.name)」存在前缀冲突；「\(target.name)」触发将改为抬起按键时触发，速度稍慢、手感变差",
+                        "Prefix conflict with \"\(prefixConflict.name)\". \"\(target.name)\" will trigger when the key is released, which is slightly slower and less responsive"
+                    ))
+                    .font(.system(size: 11))
+                }
+                .foregroundStyle(TF.settingsAccentAmber)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
             VStack(alignment: .leading, spacing: 6) {
                 Text(L("触发方式", "Trigger style"))
                     .font(.system(size: 11, weight: .semibold))
@@ -495,6 +655,7 @@ private struct HotkeyRecordingSheet: View {
                                     RoundedRectangle(cornerRadius: 5)
                                         .fill(selected ? TF.settingsNavActive : .clear)
                                 )
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
@@ -514,6 +675,19 @@ private struct HotkeyRecordingSheet: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if let kc = capturedKeyCode, ModeBinding.isMediaKeyCode(kc) {
+                let keyType = ModeBinding.mediaKeyType(from: kc)
+                if keyType == 0 || keyType == 1 || keyType == 7 {
+                    Text(L(
+                        "⚠️ 绑定音量/静音键后，按下该键时系统音量将不会改变",
+                        "⚠️ When volume/mute key is bound, pressing it will not change system volume"
+                    ))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             HStack(spacing: 12) {
@@ -539,7 +713,7 @@ private struct HotkeyRecordingSheet: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(TF.settingsTextSecondary)
 
-                Button(L("确认", "Confirm")) {
+                Button(prefixConflict == nil ? L("确认", "Confirm") : L("仍要设置", "Set Anyway")) {
                     guard let code = capturedKeyCode else { return }
                     cleanup()
                     onConfirm(code, capturedModifiers, hotkeyStyle)
@@ -572,7 +746,40 @@ private struct HotkeyRecordingSheet: View {
         cleanup()
         isListening = true
 
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .otherMouseDown, .systemDefined]) { event in
+            // Media key (headphone buttons, keyboard media keys)
+            if event.type == .systemDefined {
+                guard event.subtype.rawValue == 8 else { return event }
+                let keyType = Int((event.data1 >> 16) & 0xFFFF)
+                let keyState = Int((event.data1 >> 8) & 0xFF)
+                guard keyState == 0x0A else { return event }  // key down only
+                guard HotkeyRecorderView.isKnownMediaKeyType(keyType) else { return event }
+
+                modifierCaptureTask?.cancel()
+                modifierCaptureTask = nil
+                pendingModifierCode = nil
+
+                capturedKeyCode = ModeBinding.mediaKeyCode(for: keyType)
+                capturedModifiers = 0
+                isListening = false
+                removeMonitor()
+                return nil
+            }
+
+            // Mouse button (middle click, side buttons)
+            if event.type == .otherMouseDown {
+                let buttonNumber = event.buttonNumber
+                modifierCaptureTask?.cancel()
+                modifierCaptureTask = nil
+                pendingModifierCode = nil
+
+                capturedKeyCode = ModeBinding.mouseKeyCode(for: buttonNumber)
+                capturedModifiers = 0
+                isListening = false
+                removeMonitor()
+                return nil
+            }
+
             if event.type == .flagsChanged {
                 let kc = Int(event.keyCode)
                 guard HotkeyRecorderView.modifierKeyCodes.contains(kc) else { return event }
@@ -618,7 +825,7 @@ private struct HotkeyRecordingSheet: View {
                 }
 
                 capturedKeyCode = kc
-                let clean = sanitizedModifierFlags(event.modifierFlags)
+                let clean = sanitizedModifierFlags(event.modifierFlags, forKeyCode: kc)
                 capturedModifiers = clean.isEmpty ? 0 : UInt64(clean.rawValue)
                 isListening = false
                 removeMonitor()
@@ -654,8 +861,8 @@ private struct HotkeyRecordingSheet: View {
         removeMonitor()
     }
 
-    private func sanitizedModifierFlags(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
-        flags.intersection([.command, .shift, .option, .control])
+    private func sanitizedModifierFlags(_ flags: NSEvent.ModifierFlags, forKeyCode keyCode: Int? = nil) -> NSEvent.ModifierFlags {
+        HotkeyRecorderView.sanitizedModifierFlags(flags, forKeyCode: keyCode)
     }
 
     private func modifierFlag(for keyCode: Int) -> NSEvent.ModifierFlags? {
@@ -664,6 +871,7 @@ private struct HotkeyRecordingSheet: View {
         case 56, 60: return .shift
         case 58, 61: return .option
         case 59, 62: return .control
+        case 63: return .function
         default: return nil
         }
     }
@@ -690,6 +898,7 @@ private struct ModeDetailInner: View {
     let mode: ProcessingMode
     let onSave: (ProcessingMode) -> Void
 
+    @AppStorage("tf_shortTextExemption") private var shortTextExemption = "0"
     @State private var name = ""
     @State private var processingLabel = ""
     @State private var prompt = ""
@@ -703,77 +912,69 @@ private struct ModeDetailInner: View {
         name != mode.name || processingLabel != mode.processingLabel || prompt != mode.prompt
     }
 
+    private let exemptionOptions: [(value: String, label: String)] = [
+        ("0", L("关闭", "Off")),
+        ("10", L("10 字以下", "Under 10 chars")),
+        ("20", L("20 字以下", "Under 20 chars")),
+        ("30", L("30 字以下", "Under 30 chars")),
+        ("40", L("40 字以下", "Under 40 chars")),
+        ("50", L("50 字以下", "Under 50 chars")),
+    ]
+
+    private var shortTextExemptionSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L("短文本跳过", "Short Text Skip").uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(TF.settingsTextTertiary)
+            exemptionDropdown
+            Text(L("文本少于该字数时跳过润色，直接使用识别结果",
+                     "Skip polishing for texts shorter than this threshold"))
+                .font(.system(size: 10))
+                .foregroundStyle(TF.settingsTextTertiary)
+        }
+    }
+
+    private var exemptionDropdown: some View {
+        let currentLabel = exemptionOptions.first(where: { $0.value == shortTextExemption })?.label ?? shortTextExemption
+        return Menu {
+            ForEach(exemptionOptions, id: \.value) { option in
+                Button {
+                    shortTextExemption = option.value
+                } label: {
+                    if option.value == shortTextExemption {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(currentLabel)
+                    .font(.system(size: 13))
+                    .foregroundStyle(TF.settingsText)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Name
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("名称", "Name"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TF.settingsTextTertiary)
-                TextField(L("模式名称", "Mode name"), text: $name)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6).fill(TF.settingsBg)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(TF.settingsTextTertiary.opacity(0.2), lineWidth: 1)
-                    )
-            }
+            // Header + save
+            HStack(spacing: 6) {
+                Text(name.isEmpty ? L("新模式", "New Mode") : name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(TF.settingsText)
 
-            // Processing label
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("处理标签", "Processing label"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TF.settingsTextTertiary)
-                TextField(L("处理中", "Processing"), text: $processingLabel)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6).fill(TF.settingsBg)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(TF.settingsTextTertiary.opacity(0.2), lineWidth: 1)
-                    )
-                Text(L("处理进行时浮窗显示的文案，如「翻译中」「修正中」", "Text shown in the floating bar during processing, e.g. \"Translating\" \"Correcting\""))
-                    .font(.system(size: 10))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
-
-            // Prompt
-            VStack(alignment: .leading, spacing: 4) {
-                Text(L("Prompt 模板", "Prompt Template"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(TF.settingsTextTertiary)
-                TextEditor(text: $prompt)
-                    .font(.system(size: 11, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .frame(minHeight: 80)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6).fill(TF.settingsBg)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(TF.settingsTextTertiary.opacity(0.2), lineWidth: 1)
-                    )
-                Text(L("变量: {text} 转写文本, {selected} 选中文本, {clipboard} 剪切板。留空则直接输出",
-                       "Variables: {text} transcribed text, {selected} selected text, {clipboard} clipboard. Leave empty for raw output."))
-                    .font(.system(size: 10))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
-
-            // Save row
-            HStack(spacing: 8) {
                 Spacer()
 
-                // Status indicator
                 if saveStatus == .saved {
                     HStack(spacing: 4) {
                         Circle().fill(TF.settingsAccentGreen).frame(width: 6, height: 6)
@@ -781,7 +982,6 @@ private struct ModeDetailInner: View {
                     }
                     .transition(.opacity)
                 }
-
                 Button(L("保存", "Save")) {
                     var updated = mode
                     updated.name = name
@@ -801,6 +1001,53 @@ private struct ModeDetailInner: View {
                 .disabled(!isDirty)
             }
 
+            // Name
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("名称", "Name"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                TextField(L("模式名称", "Mode name"), text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+            }
+
+            // Processing label
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("处理标签", "Processing label"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                TextField(L("处理中", "Processing"), text: $processingLabel)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+                Text(L("处理进行时浮窗显示的文案，如「翻译中」「修正中」", "Text shown in the floating bar during processing, e.g. \"Translating\" \"Correcting\""))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+
+            // Prompt
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(L("Prompt 模板", "Prompt Template"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                    Group {
+                        Text("{text}") + Text("  ") + Text("{selected}") + Text("  ") + Text("{clipboard}")
+                    }
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.6))
+                }
+                AutoSizingTextEditor(text: $prompt)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+            }
+
             Spacer()
         }
         .onAppear { syncFields() }
@@ -815,5 +1062,329 @@ private struct ModeDetailInner: View {
         processingLabel = mode.processingLabel
         prompt = mode.prompt
         saveStatus = .clean
+    }
+}
+
+// MARK: - Formal Writing Detail Inner
+
+private struct FormalWritingDetailInner: View {
+
+    let mode: ProcessingMode
+    @Binding var shortTextExemption: String
+    let onSave: (ProcessingMode) -> Void
+
+    @State private var name = ""
+    @State private var processingLabel = ""
+    @State private var prompt = ""
+    @State private var saveStatus: SaveStatus = .clean
+    @State private var promptBeforeUpdate: String?
+
+    private enum SaveStatus: Equatable {
+        case clean, dirty, saved
+    }
+
+    private var isDirty: Bool {
+        name != mode.name || processingLabel != mode.processingLabel || prompt != mode.prompt
+    }
+
+    private var isLatestPrompt: Bool {
+        prompt == ProcessingMode.formalWritingPromptTemplate
+    }
+
+    private let exemptionOptions: [(value: String, label: String)] = [
+        ("0", L("关闭", "Off")),
+        ("10", L("10 字以下", "Under 10 chars")),
+        ("20", L("20 字以下", "Under 20 chars")),
+        ("30", L("30 字以下", "Under 30 chars")),
+        ("40", L("40 字以下", "Under 40 chars")),
+        ("50", L("50 字以下", "Under 50 chars")),
+    ]
+
+    private var shortTextExemptionSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L("短文本跳过", "Short Text Skip").uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(TF.settingsTextTertiary)
+            exemptionDropdown
+            Text(L("文本少于该字数时跳过润色，直接使用识别结果",
+                     "Skip polishing for texts shorter than this threshold"))
+                .font(.system(size: 10))
+                .foregroundStyle(TF.settingsTextTertiary)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header + actions
+            HStack(spacing: 6) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 14))
+                    .foregroundStyle(TF.settingsAccentAmber)
+                Text(mode.name)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(TF.settingsText)
+                Text(L("内置", "BUILT-IN"))
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Capsule().fill(TF.settingsCardAlt))
+
+                Spacer()
+
+                if !isLatestPrompt {
+                    Button {
+                        promptBeforeUpdate = prompt
+                        prompt = ProcessingMode.formalWritingPromptTemplate
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 9))
+                            Text(L("还原为官方版", "Restore to official"))
+                                .font(.system(size: 10))
+                        }
+                        .foregroundStyle(TF.settingsAccentBlue)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if promptBeforeUpdate != nil {
+                    Button {
+                        prompt = promptBeforeUpdate!
+                        promptBeforeUpdate = nil
+                    } label: {
+                        HStack(spacing: 3) {
+                            Image(systemName: "arrow.uturn.backward")
+                                .font(.system(size: 9))
+                            Text(L("撤销", "Undo"))
+                                .font(.system(size: 10))
+                        }
+                        .foregroundStyle(TF.settingsTextSecondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                if saveStatus == .saved {
+                    HStack(spacing: 4) {
+                        Circle().fill(TF.settingsAccentGreen).frame(width: 6, height: 6)
+                        Text(L("已保存", "Saved")).font(.system(size: 10)).foregroundStyle(TF.settingsAccentGreen)
+                    }
+                    .transition(.opacity)
+                }
+
+                Button(L("保存", "Save")) {
+                    var updated = mode
+                    updated.name = name
+                    updated.processingLabel = processingLabel
+                    updated.prompt = prompt
+                    onSave(updated)
+                    promptBeforeUpdate = nil
+                    withAnimation { saveStatus = .saved }
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 5)
+                .background(RoundedRectangle(cornerRadius: 6).fill(
+                    isDirty ? TF.settingsNavActive : TF.settingsTextTertiary
+                ))
+                .disabled(!isDirty)
+            }
+
+            // Name
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("名称", "Name"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                TextField(L("模式名称", "Mode name"), text: $name)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+            }
+
+            // Processing label
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L("处理标签", "Processing label"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                TextField(L("处理中", "Processing"), text: $processingLabel)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+                Text(L("处理进行时浮窗显示的文案，如「翻译中」「修正中」",
+                         "Text shown in the floating bar during processing"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+
+            // Short text exemption
+            shortTextExemptionSection
+
+            // Prompt 模板
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(L("Prompt 模板", "Prompt Template"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                    Group {
+                        Text("{text}") + Text("  ") + Text("{selected}") + Text("  ") + Text("{clipboard}")
+                    }
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.6))
+                }
+                AutoSizingTextEditor(text: $prompt)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+            }
+
+            Spacer()
+        }
+        .onAppear { syncFields() }
+        .onChange(of: mode.id) { syncFields() }
+        .onChange(of: name) { _, _ in if saveStatus == .saved { saveStatus = .dirty } }
+        .onChange(of: processingLabel) { _, _ in if saveStatus == .saved { saveStatus = .dirty } }
+        .onChange(of: prompt) { _, _ in if saveStatus == .saved { saveStatus = .dirty } }
+    }
+
+    private var exemptionDropdown: some View {
+        let currentLabel = exemptionOptions.first(where: { $0.value == shortTextExemption })?.label ?? shortTextExemption
+        return Menu {
+            ForEach(exemptionOptions, id: \.value) { option in
+                Button {
+                    shortTextExemption = option.value
+                } label: {
+                    if option.value == shortTextExemption {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(currentLabel)
+                    .font(.system(size: 13))
+                    .foregroundStyle(TF.settingsText)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func syncFields() {
+        name = mode.name
+        processingLabel = mode.processingLabel
+        prompt = mode.prompt
+        saveStatus = .clean
+    }
+}
+
+// MARK: - Auto-sizing TextEditor without scrollbars
+
+private struct AutoSizingTextEditor: View {
+    @Binding var text: String
+    @State private var height: CGFloat = 80
+
+    var body: some View {
+        AutoSizingTextEditorRep(text: $text, height: $height)
+            .frame(height: max(80, height))
+    }
+}
+
+private struct AutoSizingTextEditorRep: NSViewRepresentable {
+    @Binding var text: String
+    @Binding var height: CGFloat
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+
+        let textView = NSTextView()
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.font = .systemFont(ofSize: 13)
+        textView.textColor = NSColor(TF.settingsText)
+        textView.backgroundColor = .clear
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.delegate = context.coordinator
+        textView.postsFrameChangedNotifications = true
+
+        scrollView.documentView = textView
+        context.coordinator.scrollView = scrollView
+
+        NotificationCenter.default.addObserver(
+            context.coordinator,
+            selector: #selector(Coordinator.frameDidChange),
+            name: NSView.frameDidChangeNotification,
+            object: textView
+        )
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        // Sync text container width to scroll view's content width
+        let availableWidth = scrollView.contentSize.width
+        if availableWidth > 0 {
+            textView.textContainer?.containerSize = NSSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude)
+        }
+        if textView.string != text {
+            textView.string = text
+            DispatchQueue.main.async { recalcHeight(textView) }
+        }
+    }
+
+    private func recalcHeight(_ textView: NSTextView) {
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        let newHeight = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 80
+        let padded = ceil(newHeight) + 8
+        if abs(padded - height) > 1 { height = padded }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: AutoSizingTextEditorRep
+        weak var scrollView: NSScrollView?
+        init(_ parent: AutoSizingTextEditorRep) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            parent.text = tv.string
+            recalc(tv)
+        }
+
+        @objc func frameDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            recalc(tv)
+        }
+
+        private func recalc(_ textView: NSTextView) {
+            textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+            let newHeight = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 80
+            let padded = ceil(newHeight) + 8
+            if abs(padded - parent.height) > 1 {
+                DispatchQueue.main.async { self.parent.height = padded }
+            }
+        }
     }
 }

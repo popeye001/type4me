@@ -61,6 +61,27 @@ final class BaiduProtocolTests: XCTestCase {
         XCTAssertEqual(data["dev_pid"] as? Int, 1537)
     }
 
+    func testBuildStartMessage_addsUserForMultiDialectDevPID() throws {
+        let config = try XCTUnwrap(BaiduASRConfig(credentials: [
+            "appID": "123456",
+            "apiKey": "baidu_test_key",
+            "devPID": "15376",
+            "cuid": "device-123",
+        ]))
+
+        let message = BaiduProtocol.buildStartMessage(
+            config: config,
+            options: ASRRequestOptions(enablePunc: true)
+        )
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any]
+        )
+        let data = try XCTUnwrap(json["data"] as? [String: Any])
+
+        XCTAssertEqual(data["dev_pid"] as? Int, 15376)
+        XCTAssertEqual(data["user"] as? String, "device-123")
+    }
+
     func testBuildFinishMessage_matchesDocumentation() throws {
         let message = BaiduProtocol.buildFinishMessage()
         let json = try XCTUnwrap(

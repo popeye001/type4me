@@ -20,6 +20,21 @@ final class BailianASRConfigTests: XCTestCase {
         XCTAssertTrue(config.isValid)
     }
 
+    func testSupportedModelsExposeCurrentFunASRRealtimeSnapshots() {
+        XCTAssertEqual(BailianASRConfig.supportedModels.first, "fun-asr-realtime")
+        XCTAssertTrue(BailianASRConfig.supportedModels.contains("fun-asr-realtime-2026-02-28"))
+        XCTAssertTrue(BailianASRConfig.supportedModels.contains("fun-asr-flash-8k-realtime"))
+        XCTAssertFalse(BailianASRConfig.supportedModels.contains("qwen3-asr-flash-realtime"))
+    }
+
+    func testCredentialFieldsExposeModelPickerWithCustomFallback() throws {
+        let modelField = try XCTUnwrap(BailianASRConfig.credentialFields.first { $0.key == "model" })
+
+        XCTAssertEqual(modelField.defaultValue, BailianASRConfig.defaultModel)
+        XCTAssertTrue(modelField.allowCustomInput)
+        XCTAssertTrue(modelField.options.map(\.value).contains("fun-asr-realtime-2026-02-28"))
+    }
+
     func testInit_rejectsMissingAPIKey() {
         XCTAssertNil(BailianASRConfig(credentials: [:]))
     }

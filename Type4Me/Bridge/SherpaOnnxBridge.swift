@@ -1586,8 +1586,10 @@ class SherpaOnnxOfflinePunctuationWrapper {
   }
 
   func addPunct(text: String) -> String {
-    let cText = SherpaOfflinePunctuationAddPunct(ptr, toCPointer(text))
-    let ans = String(cString: cText!)
+    guard let cText = SherpaOfflinePunctuationAddPunct(ptr, toCPointer(text)) else {
+      return text  // fallback to unpunctuated text
+    }
+    let ans = String(cString: cText)
     SherpaOfflinePunctuationFreeText(cText)
     return ans
   }
@@ -1632,8 +1634,10 @@ class SherpaOnnxOnlinePunctuationWrapper {
   }
 
   func addPunct(text: String) -> String {
-    let cText = SherpaOnnxOnlinePunctuationAddPunct(ptr, toCPointer(text))
-    let ans = String(cString: cText!)
+    guard let cText = SherpaOnnxOnlinePunctuationAddPunct(ptr, toCPointer(text)) else {
+      return text  // fallback to unpunctuated text
+    }
+    let ans = String(cString: cText)
     SherpaOnnxOnlinePunctuationFreeText(cText)
     return ans
   }

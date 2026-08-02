@@ -4,29 +4,20 @@ struct SonioxASRConfig: ASRProviderConfig, Sendable {
 
     static let provider = ASRProvider.soniox
     static let displayName = "Soniox"
-    static let defaultModel = "stt-rt-v4"
+    static let defaultModel = "stt-rt-v5"
+    static let asyncModel = "stt-async-v5"
     static let supportedModels = [
-        "stt-rt-v4",
-        "stt-rt-v3",
+        "stt-rt-v5",
     ]
 
     static var credentialFields: [CredentialField] {[
         CredentialField(
             key: "apiKey",
-            label: "API Key",
-            placeholder: "",
+            label: L("API Key (默认 \(defaultModel))", "API Key (uses \(defaultModel))"),
+            placeholder: L("粘贴 API Key", "Paste your API Key"),
             isSecure: true,
             isOptional: false,
             defaultValue: ""
-        ),
-        CredentialField(
-            key: "model",
-            label: L("Streaming Model", "Streaming Model"),
-            placeholder: defaultModel,
-            isSecure: false,
-            isOptional: false,
-            defaultValue: defaultModel,
-            options: supportedModels.map { FieldOption(value: $0, label: $0) }
         ),
     ]}
 

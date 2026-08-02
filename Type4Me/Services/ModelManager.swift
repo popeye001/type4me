@@ -22,55 +22,22 @@ actor ModelManager {
 
     private var modelsDir: String { Self.defaultModelsDir }
 
-    // MARK: - Model Architecture
-
-    enum ModelArchitecture: String, Sendable {
-        case paraformer
-        case ctc
-    }
-
     // MARK: - Streaming Model Variants
 
     enum StreamingModel: String, CaseIterable, Sendable {
-        case zipformerSmallCtc    = "zipformer-small-ctc"
-        case zipformerCtcMulti    = "zipformer-ctc-multi"
-        case paraformerBilingual  = "paraformer-bilingual"
+        case senseVoiceSmall = "sensevoice-small"
 
         var displayName: String {
-            switch self {
-            case .zipformerSmallCtc:   return L("极速轻量", "Ultra Light")
-            case .zipformerCtcMulti:   return L("均衡推荐", "Balanced")
-            case .paraformerBilingual: return L("中英双语", "Bilingual")
-            }
+            return L("SenseVoice 智能识别", "SenseVoice Smart")
         }
 
         var description: String {
-            switch self {
-            case .zipformerSmallCtc:
-                return L("最小模型，适合快速输入，精度一般",
-                         "Smallest model, fast input, moderate accuracy")
-            case .zipformerCtcMulti:
-                return L("14000小时训练，精度与大小的最佳平衡",
-                         "14k hours training, best accuracy/size balance")
-            case .paraformerBilingual:
-                return L("精度最高，支持中英文混合识别",
-                         "Highest accuracy, Chinese + English mixed recognition")
-            }
-        }
-
-        var architecture: ModelArchitecture {
-            switch self {
-            case .zipformerSmallCtc, .zipformerCtcMulti: return .ctc
-            case .paraformerBilingual: return .paraformer
-            }
+            return L("阿里最新模型，中文准确率最高，支持中英粤日韩",
+                     "Alibaba's latest, best Chinese accuracy, zh/en/yue/ja/ko")
         }
 
         var directoryName: String {
-            switch self {
-            case .zipformerSmallCtc:   return "sherpa-onnx-streaming-zipformer-small-ctc-zh-int8-2025-04-01"
-            case .zipformerCtcMulti:   return "sherpa-onnx-streaming-zipformer-ctc-multi-zh-hans-2023-12-13"
-            case .paraformerBilingual: return "sherpa-onnx-streaming-paraformer-bilingual-zh-en"
-            }
+            return "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2024-07-17"
         }
 
         var downloadURL: URL {
@@ -79,33 +46,35 @@ actor ModelManager {
         }
 
         var requiredFiles: [String] {
-            switch self {
-            case .zipformerSmallCtc:
-                return ["model.int8.onnx", "tokens.txt"]
-            case .zipformerCtcMulti:
-                return ["ctc-epoch-20-avg-1-chunk-16-left-128.onnx", "tokens.txt"]
-            case .paraformerBilingual:
-                return ["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"]
-            }
+            return ["model.int8.onnx", "tokens.txt"]
         }
 
         /// The primary model file used by the recognizer.
         var modelFileName: String {
-            switch self {
-            case .zipformerSmallCtc:   return "model.int8.onnx"
-            case .zipformerCtcMulti:   return "ctc-epoch-20-avg-1-chunk-16-left-128.onnx"
-            case .paraformerBilingual: return "encoder.int8.onnx"  // uses encoder+decoder
-            }
+            return "model.int8.onnx"
         }
 
         /// Approximate download size in MB for UI display.
         var approximateSizeMB: Int {
-            switch self {
-            case .zipformerSmallCtc:   return 20
-            case .zipformerCtcMulti:   return 236
-            case .paraformerBilingual: return 1000
-            }
+            return 228
         }
+    }
+
+    // MARK: - Local ASR Availability
+
+    /// Whether the Qwen3-ASR server is bundled in the app (full DMG version).
+    nonisolated static var isQwen3ASRBundled: Bool {
+        // Check if qwen3-asr-server exists in app bundle
+        if let bundled = Bundle.main.executableURL?
+            .deletingLastPathComponent()
+            .appendingPathComponent("qwen3-asr-server"),
+           FileManager.default.fileExists(atPath: bundled.path) {
+            return true
+        }
+        // Dev mode: check if qwen3-asr-server dir exists in project
+        let home = NSHomeDirectory()
+        let devPath = (home as NSString).appendingPathComponent("projects/type4me/qwen3-asr-server/server.py")
+        return FileManager.default.fileExists(atPath: devPath)
     }
 
     // MARK: - Auxiliary Model Types (punctuation, offline, etc.)
@@ -113,11 +82,13 @@ actor ModelManager {
     enum AuxModelType: String, CaseIterable, Sendable {
         case offlineParaformer = "offline-paraformer"
         case punctuation       = "punctuation"
+        case sileroVad         = "silero-vad"
 
         var displayName: String {
             switch self {
             case .offlineParaformer: return L("离线识别模型", "Offline ASR")
             case .punctuation:       return L("标点恢复模型", "Punctuation")
+            case .sileroVad:         return L("语音检测模型", "Voice Detection")
             }
         }
 
@@ -125,24 +96,34 @@ actor ModelManager {
             switch self {
             case .offlineParaformer: return "sherpa-onnx-paraformer-zh-2023-09-14"
             case .punctuation:       return "sherpa-onnx-punct-ct-transformer-zh-en-vocab272727-2024-04-12"
+            case .sileroVad:         return "silero_vad"
             }
         }
 
         var downloadURL: URL {
-            let base: String
             switch self {
             case .offlineParaformer:
-                base = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+                return URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/" + directoryName + ".tar.bz2")!
             case .punctuation:
-                base = "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/"
+                return URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/punctuation-models/" + directoryName + ".tar.bz2")!
+            case .sileroVad:
+                return URL(string: "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx")!
             }
-            return URL(string: base + directoryName + ".tar.bz2")!
+        }
+
+        /// Whether this model is a single file download (not a tar.bz2 archive).
+        var isSingleFile: Bool {
+            switch self {
+            case .sileroVad: return true
+            default: return false
+            }
         }
 
         var requiredFiles: [String] {
             switch self {
             case .offlineParaformer: return ["model.int8.onnx", "tokens.txt"]
             case .punctuation:       return ["model.onnx"]
+            case .sileroVad:         return ["silero_vad.onnx"]
             }
         }
 
@@ -150,6 +131,42 @@ actor ModelManager {
             switch self {
             case .offlineParaformer: return 700
             case .punctuation:       return 72
+            case .sileroVad:         return 2
+            }
+        }
+    }
+
+    // MARK: - Deploy Bundled Models
+
+    /// Copy bundled models from app bundle (Contents/Resources/Models/) to
+    /// Application Support on first launch. No-op if models already exist or
+    /// if the bundle doesn't contain models (non-local variant).
+    nonisolated static func deployBundledModelsIfNeeded() {
+        guard let bundledModelsURL = Bundle.main.resourceURL?
+            .appendingPathComponent("Models") else { return }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: bundledModelsURL.path) else { return }
+
+        // Ensure destination directory exists
+        let destDir = defaultModelsDir
+        try? fm.createDirectory(atPath: destDir, withIntermediateDirectories: true)
+
+        // Models to deploy: SenseVoice + Silero VAD
+        let modelDirs = [
+            StreamingModel.senseVoiceSmall.directoryName,
+            AuxModelType.sileroVad.directoryName,
+        ]
+
+        for dirName in modelDirs {
+            let src = bundledModelsURL.appendingPathComponent(dirName)
+            let dst = (destDir as NSString).appendingPathComponent(dirName)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            guard !fm.fileExists(atPath: dst) else { continue }
+            do {
+                try fm.copyItem(atPath: src.path, toPath: dst)
+                NSLog("[ModelManager] Deployed bundled model: %@", dirName)
+            } catch {
+                NSLog("[ModelManager] Failed to deploy %@: %@", dirName, error.localizedDescription)
             }
         }
     }
@@ -158,13 +175,24 @@ actor ModelManager {
 
     private static let selectedModelKey = "tf_selectedStreamingModel"
 
+    /// Raw values of removed models — migrate to senseVoiceSmall.
+    private static let removedModelRawValues: Set<String> = [
+        "zipformer-small-ctc", "zipformer-ctc-multi", "paraformer-bilingual"
+    ]
+
     nonisolated static var selectedStreamingModel: StreamingModel {
         get {
-            if let raw = UserDefaults.standard.string(forKey: selectedModelKey),
-               let model = StreamingModel(rawValue: raw) {
-                return model
+            if let raw = UserDefaults.standard.string(forKey: selectedModelKey) {
+                if let model = StreamingModel(rawValue: raw) {
+                    return model
+                }
+                // Migrate removed models
+                if removedModelRawValues.contains(raw) {
+                    UserDefaults.standard.set(StreamingModel.senseVoiceSmall.rawValue, forKey: selectedModelKey)
+                    return .senseVoiceSmall
+                }
             }
-            return .zipformerCtcMulti  // default
+            return .senseVoiceSmall
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: selectedModelKey)
@@ -198,11 +226,11 @@ actor ModelManager {
     // MARK: - Query (Streaming Models)
 
     nonisolated func isModelAvailable(_ model: StreamingModel) -> Bool {
-        checkFiles(dir: model.directoryName, files: model.requiredFiles)
+        Self.isQwen3ASRBundled
     }
 
     nonisolated func isSelectedModelAvailable() -> Bool {
-        isModelAvailable(Self.selectedStreamingModel)
+        Self.isQwen3ASRBundled
     }
 
     /// Legacy compatibility — used by RecognitionSession.
@@ -293,6 +321,7 @@ actor ModelManager {
             key: aux.directoryName,
             url: aux.downloadURL,
             requiredFiles: aux.requiredFiles,
+            isSingleFile: aux.isSingleFile,
             onProgress: onProgress
         )
     }
@@ -324,14 +353,27 @@ actor ModelManager {
 
     // MARK: - Generic Download
 
+    /// Minimum free disk space required before starting any model download (2 GB).
+    private let minimumFreeDiskSpace: Int64 = 2_000_000_000
+
     private func downloadGeneric(
         key: String,
         url: URL,
         requiredFiles: [String],
+        isSingleFile: Bool = false,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws {
         // Cancel any existing download task but keep resume data for continuation
         cancelGeneric(key: key, clearResumeData: false)
+
+        // Check available disk space before starting download
+        if let attrs = try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory()),
+           let freeSpace = attrs[.systemFreeSize] as? Int64,
+           freeSpace < minimumFreeDiskSpace {
+            let freeGB = String(format: "%.1f", Double(freeSpace) / 1_000_000_000)
+            logger.error("Insufficient disk space: \(freeGB) GB free, need 2 GB minimum")
+            throw ModelError.insufficientDiskSpace(freeGB: freeGB)
+        }
 
         let destDir = (modelsDir as NSString).appendingPathComponent(key)
         logger.info("Starting download: \(key) from \(url.absoluteString)")
@@ -355,16 +397,37 @@ actor ModelManager {
 
             try Task.checkCancellation()
 
-            logger.info("Extracting \(key) to \(self.modelsDir)")
             onProgress(0.95)
-            do {
-                try await extractTarBz2(tempFile, to: modelsDir)
-            } catch {
-                let partialDir = (modelsDir as NSString).appendingPathComponent(key)
-                try? FileManager.default.removeItem(atPath: partialDir)
-                throw error
+
+            if isSingleFile {
+                // Single file download: create directory and move file directly
+                logger.info("Placing single file \(key) into \(destDir)")
+                try FileManager.default.createDirectory(
+                    atPath: destDir,
+                    withIntermediateDirectories: true
+                )
+                let fileName = requiredFiles.first ?? url.lastPathComponent
+                let destPath = (destDir as NSString).appendingPathComponent(fileName)
+                if FileManager.default.fileExists(atPath: destPath) {
+                    try FileManager.default.removeItem(atPath: destPath)
+                }
+                try FileManager.default.moveItem(
+                    at: tempFile,
+                    to: URL(fileURLWithPath: destPath)
+                )
+            } else {
+                // Archive download: extract tar.bz2
+                logger.info("Extracting \(key) to \(self.modelsDir)")
+                do {
+                    try await extractTarBz2(tempFile, to: modelsDir)
+                } catch {
+                    let partialDir = (modelsDir as NSString).appendingPathComponent(key)
+                    try? FileManager.default.removeItem(atPath: partialDir)
+                    try? FileManager.default.removeItem(at: tempFile)
+                    throw error
+                }
+                try? FileManager.default.removeItem(at: tempFile)
             }
-            try? FileManager.default.removeItem(at: tempFile)
 
             guard checkFiles(dir: key, files: requiredFiles) else {
                 logger.error("Model validation failed: \(key)")
@@ -447,7 +510,7 @@ actor ModelManager {
                 // Success — clear resume data
                 resumeData[key] = nil
 
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                guard let http = response as? HTTPURLResponse, (http.statusCode == 200 || http.statusCode == 206) else {
                     throw ModelError.downloadFailed(url)
                 }
 
@@ -575,6 +638,7 @@ actor ModelManager {
     enum ModelError: Error, LocalizedError {
         case downloadFailed(URL)
         case extractionFailed
+        case insufficientDiskSpace(freeGB: String)
 
         var errorDescription: String? {
             switch self {
@@ -582,6 +646,8 @@ actor ModelManager {
                 return L("模型下载失败: \(url.lastPathComponent)", "Model download failed: \(url.lastPathComponent)")
             case .extractionFailed:
                 return L("模型解压失败", "Model extraction failed")
+            case .insufficientDiskSpace(let freeGB):
+                return L("磁盘空间不足（剩余 \(freeGB) GB），需要至少 2 GB", "Insufficient disk space (\(freeGB) GB free), need at least 2 GB")
             }
         }
     }

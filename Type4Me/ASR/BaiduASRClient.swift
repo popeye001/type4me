@@ -63,7 +63,7 @@ actor BaiduASRClient: SpeechRecognizer {
 
         let gate = BaiduConnectionGate()
         let delegate = BaiduWebSocketDelegate(connectionGate: gate)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let session = URLSession(configuration: options.urlSessionConfiguration, delegate: delegate, delegateQueue: nil)
         let requestID = UUID().uuidString.lowercased()
         let task = session.webSocketTask(with: BaiduProtocol.buildWebSocketURL(requestID: requestID))
         task.resume()
@@ -85,8 +85,8 @@ actor BaiduASRClient: SpeechRecognizer {
 
     func sendAudio(_ data: Data) async throws {
         guard let task = webSocketTask else { return }
-        audioPacketCount += 1
         try await task.send(.data(data))
+        audioPacketCount += 1
     }
 
     func endAudio() async throws {

@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// Cached font for text measurement (module-level to avoid generic-type static restriction).
+private let floatingBarFont = NSFont.systemFont(ofSize: 14, weight: .medium)
+
 // MARK: - FloatingBarState Protocol
 
 @MainActor
@@ -9,9 +12,24 @@ protocol FloatingBarState: AnyObject, Observable {
     var audioLevel: AudioLevelMeter { get }
     var currentMode: ProcessingMode { get }
     var feedbackMessage: String { get }
+    var feedbackKind: FeedbackKind { get }
     var processingFinishTime: Date? { get }
     var transcriptionText: String { get }
     var recordingStartDate: Date? { get }
+    var recordingDurationAtStop: TimeInterval? { get }
+    var processedAudioSeconds: TimeInterval { get }
+    var recognizedCharacterCount: Int { get }
+    var showsAudioBacklog: Bool { get }
+    /// True when recording without SenseVoice streaming (Qwen3-only).
+    var isQwen3OnlyMode: Bool { get }
+    var effectiveProcessingLabel: String { get }
+}
+
+extension FloatingBarState {
+    var recordingDurationAtStop: TimeInterval? { nil }
+    var processedAudioSeconds: TimeInterval { 0 }
+    var recognizedCharacterCount: Int { transcriptionText.count }
+    var showsAudioBacklog: Bool { false }
 }
 
 /// Dark-themed floating transcription bar with smooth morphing between states.
@@ -19,26 +37,65 @@ protocol FloatingBarState: AnyObject, Observable {
 /// Design: single capsule container that animates width + content transitions.
 /// - Recording: audio-reactive dot + live text + timer, breathing border
 /// - Processing: rotating orb with breathing glow + "AI" badge
-/// - Done: bouncing green dot with ripple + "OK" badge
+/// - Done: full progress bar + centered text
 struct FloatingBarView<S: FloatingBarState>: View {
 
     let state: S
 
+
     @State private var breathe = false
     @State private var doneGlow = true
-    @State private var doneAppeared = false
-    @State private var doneRipple = false
     /// High-water mark: only grows during recording, never shrinks (prevents ASR correction jitter)
     @State private var recordingPeakWidth: CGFloat = TF.barHeight
+    @State private var processingStartDate: Date?
+    @State private var doneStartDate: Date?
+    @State private var isHovered = false
+    @AppStorage("tf_hoverTranscriptPreview") private var hoverTranscriptPreview = true
+    @AppStorage(RecordingVisualStyle.storageKey) private var visualStyle = RecordingVisualStyle.defaultValue
+
+    // MARK: - Transcript Popup
+
+    private var recordingVisualStyle: RecordingVisualStyle {
+        RecordingVisualStyle(rawValue: visualStyle) ?? .timeline
+    }
+
+    private var shouldRenderCapsule: Bool {
+        guard state.barPhase != .hidden else { return false }
+        if !recordingVisualStyle.showsRecordingPanel,
+           state.barPhase == .preparing || state.barPhase == .recording {
+            return false
+        }
+        return true
+    }
+
+    private var showTranscriptPopup: Bool {
+        guard recordingVisualStyle.showsRecordingPanel,
+              hoverTranscriptPreview,
+              isHovered,
+              state.barPhase == .recording,
+              !state.segments.isEmpty
+        else { return false }
+        let textWidth = measureText(state.transcriptionText)
+        return textWidth + 66 > TF.barWidth
+    }
 
     private var capsuleWidth: CGFloat {
         switch state.barPhase {
         case .preparing:
             return TF.barHeight
         case .recording:
-            return state.segments.isEmpty ? TF.barHeight : recordingPeakWidth
+            if state.showsAudioBacklog {
+                return 300
+            }
+            if state.segments.isEmpty {
+                return state.isQwen3OnlyMode ? 110 : TF.barHeight
+            }
+            return recordingPeakWidth
         case .processing:
-            return measureText(state.currentMode.processingLabel) + 66.0
+            if state.showsAudioBacklog {
+                return 300
+            }
+            return measureText(state.effectiveProcessingLabel) + 66.0
         case .done:
             return feedbackWidth(for: state.feedbackMessage)
         case .error:
@@ -49,22 +106,34 @@ struct FloatingBarView<S: FloatingBarState>: View {
     }
 
     var body: some View {
-        Group {
-            if state.barPhase != .hidden {
+        VStack(spacing: TF.transcriptPopupGap) {
+            if showTranscriptPopup {
+                transcriptPopup
+            }
+
+            if shouldRenderCapsule {
                 capsuleBar
-                    .transition(.asymmetric(
-                        insertion: .scale(scale: 0.92).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+                .transition(.asymmetric(
+                    insertion: .scale(scale: 0.92).combined(with: .opacity),
+                    removal: .opacity
+                ))
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            FloatingBarHoverTracker { hovered in
+                isHovered = hovered
+            }
+        }
+        .padding(.bottom, 16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .animation(TF.springSnappy, value: state.barPhase != .hidden)
+        .animation(TF.springSnappy, value: shouldRenderCapsule)
+        .animation(TF.springSnappy, value: visualStyle)
         .onChange(of: state.barPhase) { _, newPhase in
             handlePhaseChange(newPhase)
         }
         .onChange(of: state.segments) { _, newSegments in
-            guard state.barPhase == .recording else { return }
+            guard state.barPhase == .recording, !state.showsAudioBacklog else { return }
             let text = newSegments.map(\.text).joined()
             let textWidth = measureText(text)
             let needed = min(TF.barWidth, max(TF.barHeight, textWidth + 66.0))
@@ -146,14 +215,22 @@ struct FloatingBarView<S: FloatingBarState>: View {
         .frame(maxWidth: .infinity)
     }
 
+    @ViewBuilder
     private var recordingContent: some View {
-        HStack(spacing: 10) {
+        if state.showsAudioBacklog {
+            localVoiceStatusContent(isRecording: true)
+        } else {
+            HStack(spacing: 10) {
             // Module 1: dot (fixed position, 14pt from left edge)
             RecordingDot(meter: state.audioLevel)
 
             // Module 2: text container (fills remaining space, grows with frame)
             // Uses overlay so text sizing never affects HStack layout
-            if !state.segments.isEmpty {
+            if state.segments.isEmpty && state.isQwen3OnlyMode {
+                Text(L("录音中", "Recording"))
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+            } else if !state.segments.isEmpty {
                 Color.clear
                     .overlay(alignment: .trailing) {
                         Text(state.transcriptionText)
@@ -181,33 +258,103 @@ struct FloatingBarView<S: FloatingBarState>: View {
                     .allowsHitTesting(false)
                     .transition(.opacity)
             }
+            }
+            .padding(.horizontal, 14)
         }
-        .padding(.horizontal, 14)
     }
 
+    @ViewBuilder
     private var processingContent: some View {
-        ZStack {
-            Text(state.currentMode.processingLabel)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white)
+        if state.showsAudioBacklog {
+            localVoiceStatusContent(isRecording: false)
+        } else {
+            ZStack {
+                Text(state.effectiveProcessingLabel)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    private func localVoiceStatusContent(isRecording: Bool) -> some View {
+        ZStack(alignment: .bottom) {
+            HStack(spacing: 9) {
+                if isRecording {
+                    LiveMicWaveform(meter: state.audioLevel, isRecording: true)
+                } else {
+                    Text(state.effectiveProcessingLabel)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.62))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                Text(latestTranscriptTail)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(state.transcriptionText.isEmpty ? .white.opacity(0.28) : .white)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+
+                Text("\(state.recognizedCharacterCount)")
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.62))
+                    .contentTransition(.numericText(value: Double(state.recognizedCharacterCount)))
+                    .animation(.easeOut(duration: 0.2), value: state.recognizedCharacterCount)
+                    .frame(minWidth: 28, alignment: .trailing)
+            }
+            .padding(.horizontal, 14)
+            // Keep the status row visibly clear of the queue bar below it.
+            .padding(.bottom, 12)
+
+            AudioBacklogBar(
+                recordingStartDate: state.recordingStartDate,
+                recordingDurationAtStop: state.recordingDurationAtStop,
+                processedAudioSeconds: state.processedAudioSeconds
+            )
+            .frame(height: 5)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 4)
+        }
+    }
+
+    private var latestTranscriptTail: String {
+        let text = state.transcriptionText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? "…" : String(text.suffix(18))
     }
 
     private var doneContent: some View {
-        HStack(spacing: 10) {
-            DoneDot(appeared: doneAppeared, ripple: doneRipple)
-
-            Text(state.feedbackMessage)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white)
+        Group {
+            if let icon = feedbackIcon {
+                HStack(spacing: 10) {
+                    Image(systemName: icon.symbol)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(icon.color)
+                    Text(state.feedbackMessage)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 14)
+            } else {
+                Text(state.feedbackMessage)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .padding(.horizontal, 14)
     }
 
     private var errorContent: some View {
         HStack(spacing: 10) {
-            ErrorDot()
+            if let icon = feedbackIcon {
+                Image(systemName: icon.symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(icon.color)
+            } else {
+                ErrorDot()
+            }
 
             Text(state.feedbackMessage)
                 .font(.system(size: 14, weight: .medium))
@@ -217,27 +364,39 @@ struct FloatingBarView<S: FloatingBarState>: View {
         .padding(.horizontal, 14)
     }
 
+    /// SF Symbol + tint for the current feedback kind, or nil for the standard
+    /// look (no leading icon, centered text — the existing `.done`/`.error` UI).
+    private var feedbackIcon: (symbol: String, color: Color)? {
+        switch state.feedbackKind {
+        case .standard:
+            return nil
+        case .macActionSuccess:
+            return ("checkmark.circle.fill", TF.success)
+        case .macActionFailure:
+            return ("xmark.circle.fill", TF.settingsAccentRed)
+        case .macActionUnsure:
+            return ("questionmark.circle.fill", TF.amber)
+        }
+    }
+
     // MARK: - Background & Border
 
     private var capsuleBackground: some View {
         ZStack {
             Color(white: 0.08, opacity: 0.88)
 
-            if state.barPhase == .recording {
-                AudioRipple(meter: state.audioLevel)
+            if state.barPhase == .recording && !state.showsAudioBacklog {
+                AudioRipple(meter: state.audioLevel, style: recordingVisualStyle)
+                    .id(recordingVisualStyle.rawValue)
                     .transition(.opacity)
             }
 
-            if state.barPhase == .processing {
-                ProcessingProgress(finishTime: state.processingFinishTime)
-                    .transition(.opacity)
-            }
-
-            if state.barPhase == .done {
-                LinearGradient(
-                    colors: [TF.success.opacity(0.18), .clear],
-                    startPoint: .leading,
-                    endPoint: UnitPoint(x: 0.45, y: 0.5)
+            if (state.barPhase == .processing || state.barPhase == .done)
+                && !state.showsAudioBacklog {
+                ProcessingProgress(
+                    finishTime: state.processingFinishTime,
+                    processingStartDate: processingStartDate,
+                    doneStartDate: doneStartDate
                 )
                 .transition(.opacity)
             }
@@ -267,7 +426,12 @@ struct FloatingBarView<S: FloatingBarState>: View {
         case .processing:
             .white.opacity(0.07)
         case .done:
-            TF.success.opacity(doneGlow ? 0.3 : 0.08)
+            switch state.feedbackKind {
+            case .macActionUnsure:
+                TF.amber.opacity(0.30)
+            case .macActionSuccess, .macActionFailure, .standard:
+                TF.success.opacity(doneGlow ? 0.3 : 0.08)
+            }
         case .error:
             TF.settingsAccentRed.opacity(0.22)
         case .hidden:
@@ -278,9 +442,18 @@ struct FloatingBarView<S: FloatingBarState>: View {
     // MARK: - Phase Transitions
 
     private func handlePhaseChange(_ phase: FloatingBarPhase) {
+        // Reset hover state on panel show/hide boundaries.
+        // NSTrackingArea suspends events when the view is hidden (panel orderOut)
+        // instead of firing mouseExited, so isHovered would otherwise leak across
+        // recording sessions and auto-show the popup without any actual hover.
+        if phase == .preparing || phase == .hidden {
+            isHovered = false
+        }
         switch phase {
         case .preparing:
             recordingPeakWidth = TF.barHeight
+            processingStartDate = nil
+            doneStartDate = nil
             breathe = false
             withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                 breathe = true
@@ -291,32 +464,124 @@ struct FloatingBarView<S: FloatingBarState>: View {
             withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
                 breathe = true
             }
+        case .processing:
+            processingStartDate = Date()
+            doneStartDate = nil
+            breathe = false
         case .done:
+            doneStartDate = Date()
             breathe = false
             doneGlow = true
-            doneAppeared = false
-            doneRipple = false
-            withAnimation(TF.springBouncy) { doneAppeared = true }
-            withAnimation(.easeOut(duration: 0.8)) { doneRipple = true }
             withAnimation(.easeOut(duration: 1.0)) { doneGlow = false }
         case .error:
             breathe = false
             doneGlow = false
-            doneAppeared = false
-            doneRipple = false
         default:
             breathe = false
         }
     }
 
     private func feedbackWidth(for message: String) -> CGFloat {
-        measureText(message) + 66.0
+        // Reserve extra room when an SF Symbol icon is shown (icon + spacing).
+        let iconExtra: CGFloat = feedbackIcon == nil ? 0 : 26
+        return measureText(message) + 66.0 + iconExtra
     }
 
     /// Measure actual rendered width using the same font as the floating bar text.
     private func measureText(_ string: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 14, weight: .medium)
-        return ceil((string as NSString).size(withAttributes: [.font: font]).width)
+        ceil((string as NSString).size(withAttributes: [.font: floatingBarFont]).width)
+    }
+
+    // MARK: - Transcript Popup View
+
+    private var transcriptPopup: some View {
+        ScrollView(.vertical) {
+            Text(state.transcriptionText)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+        }
+            .scrollIndicators(.visible)
+            .frame(width: TF.barWidth)
+            .frame(maxHeight: TF.transcriptPopupMaxHeight)
+            .background(
+                RoundedRectangle(cornerRadius: TF.transcriptPopupCorner, style: .continuous)
+                    .fill(Color(white: 0.08, opacity: 0.78))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: TF.transcriptPopupCorner, style: .continuous))
+            .shadow(color: Color.black.opacity(0.3), radius: 8, y: -2)
+    }
+}
+
+// MARK: - LocalVoice recording status
+
+/// A deliberately simple microphone meter. Every bar is driven by the real
+/// captured level; there is no decorative idle animation.
+struct LiveMicWaveform: View {
+
+    let meter: AudioLevelMeter
+    let isRecording: Bool
+
+    private let weights: [CGFloat] = [0.38, 0.68, 1.0, 0.72, 0.42]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { _ in
+            let raw = isRecording ? CGFloat(max(0, min(1, meter.current))) : 0
+            let strength = min(1, pow(raw * 2.2, 0.65))
+
+            HStack(spacing: 2.5) {
+                ForEach(weights.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(TF.recording.opacity(isRecording ? 0.9 : 0.28))
+                        .frame(
+                            width: 2.5,
+                            height: 3 + 18 * strength * weights[index]
+                        )
+                }
+            }
+            .frame(width: 24, height: 24)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+/// Visualizes only unprocessed audio: captured duration minus the latest audio
+/// position acknowledged by LocalVoice. It fills while speech accumulates and
+/// drops as soon as a four-second decoder chunk completes.
+struct AudioBacklogBar: View {
+
+    let recordingStartDate: Date?
+    let recordingDurationAtStop: TimeInterval?
+    let processedAudioSeconds: TimeInterval
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
+            let capturedSeconds: TimeInterval = if let recordingDurationAtStop {
+                recordingDurationAtStop
+            } else if let recordingStartDate {
+                max(0, timeline.date.timeIntervalSince(recordingStartDate))
+            } else {
+                0
+            }
+            let backlogSeconds = max(0, capturedSeconds - processedAudioSeconds)
+            let fill = min(1, backlogSeconds / 4.0)
+
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.10))
+
+                    if fill > 0.002 {
+                        Capsule()
+                            .fill(TF.recording.opacity(0.72))
+                            .frame(width: max(3, geometry.size.width * fill))
+                    }
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -440,32 +705,6 @@ struct ProcessingOrb: View {
     }
 }
 
-// MARK: - Done Dot
-
-/// Green dot with a bounce-in + expanding ripple ring.
-struct DoneDot: View {
-
-    let appeared: Bool
-    let ripple: Bool
-
-    var body: some View {
-        ZStack {
-            // Ripple ring: expands outward and fades
-            Circle()
-                .stroke(TF.success.opacity(ripple ? 0 : 0.5), lineWidth: 1.5)
-                .frame(width: ripple ? 26 : 12, height: ripple ? 26 : 12)
-
-            // Core dot with spring bounce
-            Circle()
-                .fill(TF.success)
-                .frame(width: 12, height: 12)
-                .scaleEffect(appeared ? 1.0 : 0.3)
-                .shadow(color: TF.success.opacity(appeared ? 0.6 : 0), radius: appeared ? 8 : 0)
-        }
-        .frame(width: 24, height: 24)
-    }
-}
-
 struct ErrorDot: View {
 
     var body: some View {
@@ -502,34 +741,55 @@ struct RecordingTimer: View {
 
 // MARK: - Processing Progress
 
-/// Particle progress bar: fills left→right to 90% in 1.5s, then waits.
-/// When processingFinishTime is set, sprints to 100% in 0.3s.
+/// Particle progress bar with two-phase fill:
+/// - Fast phase: 0% → 70% in 1.5s (ease-out)
+/// - Slow cruise: 70% → 95% asymptotically (never stalls, always creeping)
+/// When processingFinishTime is set, sprints toward 100% in 0.3s.
+/// When doneStartDate is set, fills remaining gap to 100% in 0.15s.
+/// All timing comes from parent — no @State, so view recreation is harmless.
 struct ProcessingProgress: View {
 
     let finishTime: Date?
-    @State private var startTime: Double = 0
+    var processingStartDate: Date?
+    var doneStartDate: Date?
 
     var body: some View {
         TimelineView(.animation) { timeline in
             let time = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
-                if startTime == 0 { DispatchQueue.main.async { startTime = time } }
-                let elapsed = time - startTime
+                let startRef = processingStartDate?.timeIntervalSinceReferenceDate ?? time
+                let elapsed = time - startRef
 
-                let progress: CGFloat
-                if let finishTime {
-                    // Sprint phase: 90% → 100% in 0.3s
-                    let finishElapsed = time - finishTime.timeIntervalSinceReferenceDate
-                    let sprintProgress = min(1.0, CGFloat(finishElapsed / 0.3))
-                    let baseProgress = min(0.9, CGFloat(elapsed / 1.5) * 0.9)
-                    progress = baseProgress + (1.0 - baseProgress) * sprintProgress
-                } else {
-                    // Cruise phase: 0% → 90% in 1.5s with ease-out, then hold
+                var progress: CGFloat
+                let cruiseProgress: CGFloat
+                if elapsed <= 1.5 {
+                    // Fast phase: ease-out to 70%
                     let t = min(1.0, CGFloat(elapsed / 1.5))
-                    progress = t * 0.9 * (2.0 - t) // quadratic ease-out
+                    cruiseProgress = t * 0.7 * (2.0 - t)
+                } else {
+                    // Slow cruise: 70% → 95%, exponential approach (τ=6s)
+                    let slowT = 1.0 - exp(-(elapsed - 1.5) / 6.0)
+                    cruiseProgress = 0.7 + CGFloat(slowT) * 0.25
                 }
 
-                let fillEdge = progress * size.width
+                if let finishTime {
+                    let finishElapsed = time - finishTime.timeIntervalSinceReferenceDate
+                    let sprintT = min(1.0, CGFloat(finishElapsed / 0.3))
+                    progress = cruiseProgress + (1.0 - cruiseProgress) * sprintT
+                } else {
+                    progress = cruiseProgress
+                }
+
+                // Done: fill remaining gap to 100% in 0.15s
+                if let doneStartDate {
+                    let doneElapsed = time - doneStartDate.timeIntervalSinceReferenceDate
+                    let doneT = min(1.0, CGFloat(doneElapsed / 0.15))
+                    let base = max(progress, 0.7)
+                    progress = base + (1.0 - base) * doneT
+                }
+
+                // Push soft leading edge past visible boundary when full
+                let fillEdge = progress * size.width + (progress >= 0.99 ? 20 : 0)
                 let center = size.height / 2
 
                 var col = 0
@@ -606,7 +866,7 @@ struct ProcessingProgress: View {
 struct AudioRipple: View {
 
     let meter: AudioLevelMeter
-    @AppStorage("tf_visualStyle") private var style = "timeline"
+    let style: RecordingVisualStyle
     @State private var smootherSlow = LevelSmoother(timeConstant: 0.8)
     @State private var smootherFast = LevelSmoother(timeConstant: 0)
     @State private var startTime: Double = 0
@@ -617,9 +877,9 @@ struct AudioRipple: View {
             let time = timeline.date.timeIntervalSinceReferenceDate
             Canvas { context, size in
                 switch style {
-                case "classic": drawClassicWaves(context: &context, size: size, time: time)
-                case "dual": drawDualSpine(context: &context, size: size, time: time)
-                default: drawTimeline(context: &context, size: size, time: time)
+                case .classic: drawClassicWaves(context: &context, size: size, time: time)
+                case .dual: drawDualSpine(context: &context, size: size, time: time)
+                case .timeline, .hidden: drawTimeline(context: &context, size: size, time: time)
                 }
             }
         }
@@ -840,5 +1100,58 @@ private final class LevelTimeline {
         }
         levels[levels.count - 1] = currentLevel
         return levels
+    }
+}
+
+// MARK: - Hover Tracking (works even when app is not active)
+
+/// Uses NSTrackingArea with `.activeAlways` so hover fires on a non-key,
+/// non-activating NSPanel regardless of which app is in the foreground.
+struct FloatingBarHoverTracker: NSViewRepresentable {
+    let onHoverChanged: (Bool) -> Void
+
+    func makeNSView(context: Context) -> HoverTrackingNSView {
+        let view = HoverTrackingNSView()
+        view.onHoverChanged = onHoverChanged
+        return view
+    }
+
+    func updateNSView(_ nsView: HoverTrackingNSView, context: Context) {
+        nsView.onHoverChanged = onHoverChanged
+    }
+}
+
+final class HoverTrackingNSView: NSView {
+    var onHoverChanged: ((Bool) -> Void)?
+    private var enterWorkItem: DispatchWorkItem?
+
+    override func updateTrackingAreas() {
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self
+        ))
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        enterWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, let window = self.window else { return }
+            // Re-check mouse position at trigger time: updateTrackingAreas()
+            // sends synthetic mouseEntered when the tracking area is recreated
+            // with the cursor inside (e.g. bar grows during recording).
+            let mouseInView = self.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            guard self.bounds.contains(mouseInView) else { return }
+            self.onHoverChanged?(true)
+        }
+        enterWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        enterWorkItem?.cancel()
+        onHoverChanged?(false)
     }
 }

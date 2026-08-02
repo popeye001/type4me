@@ -5,9 +5,20 @@ actor DoubaoChatClient: LLMClient {
 
     private let logger = Logger(subsystem: "com.type4me.llm", category: "DoubaoChatClient")
     private let provider: LLMProvider
+    private let session: URLSession
+    private let metricsDelegate: LLMURLSessionMetricsDelegate
 
-    init(provider: LLMProvider = .doubao) {
+    init(
+        provider: LLMProvider = .doubao,
+        bypassProxy: Bool = ProxyBypassMode.current.bypassLLM
+    ) {
         self.provider = provider
+        let resources = LLMURLSessionFactory.make(
+            providerID: provider.rawValue,
+            bypassProxy: bypassProxy
+        )
+        session = resources.session
+        metricsDelegate = resources.metricsDelegate
     }
 
     /// Pre-establish TCP+TLS connection so the first real request skips handshake.
@@ -16,8 +27,12 @@ actor DoubaoChatClient: LLMClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 5
-        _ = try? await URLSession.shared.data(for: request)
+        _ = try? await session.data(for: request)
         logger.info("LLM connection pre-warmed to \(baseURL)")
+    }
+
+    func invalidate() async {
+        session.invalidateAndCancel()
     }
 
     /// Process text through Doubao ARK API (OpenAI-compatible streaming).
@@ -37,7 +52,15 @@ actor DoubaoChatClient: LLMClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
-        let disableField = provider.thinkingDisableField
+        // tf_disableThinking: true (default) = disable thinking to save tokens;
+        // false = let the model use its default thinking behavior.
+        let disableThinking: Bool = {
+            guard let obj = UserDefaults.standard.object(forKey: "tf_disableThinking") else {
+                return true  // default: thinking disabled
+            }
+            return obj as? Bool ?? true
+        }()
+        let disableField = disableThinking ? provider.thinkingDisableField(for: config.model) : nil
         let body = ChatRequest(
             model: config.model,
             messages: [ChatMessage(role: "user", content: finalPrompt)],
@@ -50,46 +73,85 @@ actor DoubaoChatClient: LLMClient {
         )
         request.httpBody = try JSONEncoder().encode(body)
 
-        logger.info("LLM request: \(text.count) chars, endpoint=\(config.model)")
+        logger.info("LLM request: \(text.count) chars, endpoint=\(config.model), stream=true")
 
-        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        let result = try await processStreaming(request: request, model: config.model)
+
+        logger.info("LLM result: \(result.count) chars")
+        return result.strippingThinkTags()
+    }
+
+    // MARK: - Streaming (SSE)
+
+    private func processStreaming(request: URLRequest, model: String) async throws -> String {
+        let requestStart = ContinuousClock.now
+        DebugFileLogger.log("llm: request started model=\(model)")
+        let (bytes, response) = try await session.bytes(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw LLMError.requestFailed(0)
         }
         guard http.statusCode == 200 else {
             logger.error("LLM HTTP \(http.statusCode)")
-            DebugFileLogger.log("LLM[\(config.model)]: HTTP \(http.statusCode)")
+            DebugFileLogger.log("LLM[\(model)]: HTTP \(http.statusCode)")
             throw LLMError.requestFailed(http.statusCode)
         }
 
-        // Parse SSE stream
         var result = ""
         var lineCount = 0
-        var firstDataLine: String?
+        var loggedFirstEvent = false
+        var loggedFirstToken = false
         for try await line in bytes.lines {
             lineCount += 1
             guard line.hasPrefix("data: ") else { continue }
+            if !loggedFirstEvent {
+                loggedFirstEvent = true
+                DebugFileLogger.log("llm: first SSE event +\(ContinuousClock.now - requestStart) model=\(model)")
+            }
             let payload = String(line.dropFirst(6))
-            if firstDataLine == nil { firstDataLine = String(payload.prefix(300)) }
             if payload == "[DONE]" { break }
             guard let data = payload.data(using: .utf8),
                   let chunk = try? JSONDecoder().decode(ChatStreamChunk.self, from: data),
                   let content = chunk.choices.first?.delta.content
             else { continue }
+            if !loggedFirstToken, !content.isEmpty {
+                loggedFirstToken = true
+                DebugFileLogger.log("llm: first content token +\(ContinuousClock.now - requestStart) model=\(model)")
+            }
             result += content
         }
 
         if result.isEmpty && lineCount > 0 {
-            DebugFileLogger.log("LLM[\(config.model)]: \(lineCount) lines but 0 content chars; first data=\(firstDataLine ?? "(none)")")
-            throw LLMError.emptyResponse(firstDataLine)
+            DebugFileLogger.log("LLM[\(model)]: \(lineCount) lines but 0 content chars")
+            throw LLMError.emptyResponse("stream contained no text")
         }
         if result.isEmpty {
-            DebugFileLogger.log("LLM[\(config.model)]: 0 lines received (connection closed immediately)")
+            DebugFileLogger.log("LLM[\(model)]: 0 lines received (connection closed immediately)")
             throw LLMError.emptyResponse(nil)
         }
-        logger.info("LLM result: \(result.count) chars")
+        DebugFileLogger.log("llm: completed +\(ContinuousClock.now - requestStart) chars=\(result.count) model=\(model)")
+        return result
+    }
 
-        return result.strippingThinkTags()
+    // MARK: - Non-streaming (single JSON response)
+
+    private func processNonStreaming(request: URLRequest, model: String) async throws -> String {
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw LLMError.requestFailed(0)
+        }
+        guard http.statusCode == 200 else {
+            logger.error("LLM HTTP \(http.statusCode)")
+            DebugFileLogger.log("LLM[\(model)]: HTTP \(http.statusCode)")
+            throw LLMError.requestFailed(http.statusCode)
+        }
+
+        guard let json = try? JSONDecoder().decode(ChatCompletionResponse.self, from: data),
+              let content = json.choices.first?.message.content, !content.isEmpty
+        else {
+            DebugFileLogger.log("LLM[\(model)]: non-streaming empty response")
+            throw LLMError.emptyResponse("empty response body")
+        }
+        return content
     }
 }
 
@@ -115,6 +177,20 @@ struct ChatMessage: Codable, Sendable, Equatable {
     let content: String
 }
 
+// Non-streaming response
+struct ChatCompletionResponse: Decodable, Sendable {
+    let choices: [CompletionChoice]
+}
+
+struct CompletionChoice: Decodable, Sendable {
+    let message: CompletionMessage
+}
+
+struct CompletionMessage: Decodable, Sendable {
+    let content: String?
+}
+
+// Streaming response (SSE chunks)
 struct ChatStreamChunk: Decodable, Sendable {
     let choices: [ChunkChoice]
 }

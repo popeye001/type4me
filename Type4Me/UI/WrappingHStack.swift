@@ -22,7 +22,9 @@ struct WrappingHStack: Layout {
             var x = bounds.minX
             for item in row.items {
                 let size = item.subview.sizeThatFits(.unspecified)
-                item.subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                // Vertically center each item within the row
+                let itemY = y + (row.height - size.height) / 2
+                item.subview.place(at: CGPoint(x: x, y: itemY), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
             y += row.height + spacing

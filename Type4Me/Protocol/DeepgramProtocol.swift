@@ -20,6 +20,7 @@ enum DeepgramProtocol {
 
     private static let endpoint = "wss://api.deepgram.com/v1/listen"
     private static let keywordIntensity = 2
+    private static let maxURLKeyterms = 30
 
     static func buildWebSocketURL(
         config: DeepgramASRConfig,
@@ -40,9 +41,14 @@ enum DeepgramProtocol {
             URLQueryItem(name: "smart_format", value: "true"),
         ]
 
+        if config.numerals {
+            queryItems.append(URLQueryItem(name: "numerals", value: "true"))
+        }
+
         let hotwords = options.hotwords
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+            .prefix(maxURLKeyterms)
 
         if config.model.lowercased().hasPrefix("nova-3") {
             queryItems.append(contentsOf: hotwords.map {

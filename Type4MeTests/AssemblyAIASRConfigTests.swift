@@ -9,7 +9,14 @@ final class AssemblyAIASRConfigTests: XCTestCase {
         ]))
 
         XCTAssertEqual(config.model, AssemblyAIASRConfig.defaultModel)
+        XCTAssertEqual(config.model, "universal-3-5-pro")
         XCTAssertTrue(config.isValid)
+    }
+
+    func testSupportedModelsExposeUniversal35ProFirst() {
+        XCTAssertEqual(AssemblyAIASRConfig.supportedModels.first, "universal-3-5-pro")
+        XCTAssertTrue(AssemblyAIASRConfig.supportedModels.contains("u3-rt-pro"))
+        XCTAssertTrue(AssemblyAIASRConfig.supportedModels.contains("universal-streaming-multilingual"))
     }
 
     func testInit_rejectsMissingAPIKey() {
@@ -29,14 +36,14 @@ final class AssemblyAIASRConfigTests: XCTestCase {
     func testToCredentials_roundTrips() throws {
         let config = try XCTUnwrap(AssemblyAIASRConfig(credentials: [
             "apiKey": "aa_test_key",
-            "model": "u3-rt-pro",
+            "model": "universal-3-5-pro",
         ]))
 
         XCTAssertEqual(
             config.toCredentials(),
             [
                 "apiKey": "aa_test_key",
-                "model": "u3-rt-pro",
+                "model": "universal-3-5-pro",
             ]
         )
     }

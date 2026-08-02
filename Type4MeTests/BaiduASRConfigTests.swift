@@ -22,6 +22,16 @@ final class BaiduASRConfigTests: XCTestCase {
         XCTAssertTrue(config.isValid)
     }
 
+    func testCredentialFieldsExposeRealtimeDevPIDOptions() throws {
+        let devPIDField = try XCTUnwrap(BaiduASRConfig.credentialFields.first { $0.key == "devPID" })
+        let values = devPIDField.options.map(\.value)
+
+        XCTAssertEqual(devPIDField.defaultValue, "15372")
+        XCTAssertTrue(values.contains("15372"))
+        XCTAssertTrue(values.contains("15376"))
+        XCTAssertTrue(values.contains("17372"))
+    }
+
     func testInit_rejectsMissingOrInvalidRequiredFields() {
         XCTAssertNil(BaiduASRConfig(credentials: [:]))
         XCTAssertNil(BaiduASRConfig(credentials: [

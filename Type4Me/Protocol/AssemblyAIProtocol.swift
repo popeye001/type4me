@@ -56,9 +56,8 @@ enum AssemblyAIProtocol {
             )
         }
 
-        if let encodedKeyterms = encodedKeytermsPrompt(from: options.hotwords) {
-            queryItems.append(URLQueryItem(name: "keyterms_prompt", value: encodedKeyterms))
-        }
+        // Keyterms are sent via UpdateConfiguration message after connection
+        // to avoid URL length limits that cause connection failures.
 
         components.queryItems = queryItems
 
@@ -70,6 +69,16 @@ enum AssemblyAIProtocol {
 
     static func terminateMessage() -> String {
         #"{"type":"Terminate"}"#
+    }
+
+    static func updateConfigurationMessage(hotwords: [String]) -> String? {
+        let keyterms = sanitizedKeyterms(from: hotwords)
+        guard !keyterms.isEmpty else { return nil }
+        guard let data = try? JSONSerialization.data(withJSONObject: [
+            "type": "UpdateConfiguration",
+            "keyterms_prompt": keyterms,
+        ] as [String: Any], options: []) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     static func parseServerEvent(from data: Data) throws -> AssemblyAIServerEvent? {
@@ -135,7 +144,7 @@ enum AssemblyAIProtocol {
     }
 
     private static func usesFormatTurns(model: String) -> Bool {
-        model != "u3-rt-pro"
+        model.hasPrefix("universal-streaming-")
     }
 
     private static func sanitizedKeyterms(from hotwords: [String]) -> [String] {

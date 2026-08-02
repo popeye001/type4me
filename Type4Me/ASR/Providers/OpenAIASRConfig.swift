@@ -16,10 +16,13 @@ struct OpenAIASRConfig: ASRProviderConfig, Sendable {
                 FieldOption(value: "gpt-4o-transcribe", label: "GPT-4o Transcribe ($0.36/hr)"),
                 FieldOption(value: "gpt-4o-mini-transcribe", label: "GPT-4o Mini Transcribe ($0.18/hr)"),
                 FieldOption(value: "whisper-1", label: "Whisper ($0.36/hr)"),
+                FieldOption(value: "Qwen/Qwen3-ASR-0.6B", label: "Qwen3-ASR 0.6B (189 本地极速模式)"),
+                FieldOption(value: "Qwen/Qwen3-ASR-1.7B", label: "Qwen3-ASR 1.7B (189 本地准确模式)"),
             ]
         ),
-        CredentialField(key: "baseURL", label: "Base URL", placeholder: "https://api.openai.com/v1", isSecure: false, isOptional: true, defaultValue: "https://api.openai.com/v1"),
     ]
+
+    private static let defaultBaseURL = "https://api.openai.com/v1"
 
     let apiKey: String
     let model: String
@@ -33,7 +36,7 @@ struct OpenAIASRConfig: ASRProviderConfig, Sendable {
             : Self.defaultModel
         self.baseURL = credentials["baseURL"]?.isEmpty == false
             ? credentials["baseURL"]!
-            : "https://api.openai.com/v1"
+            : Self.defaultBaseURL
     }
 
     func toCredentials() -> [String: String] {

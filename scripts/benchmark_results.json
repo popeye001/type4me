@@ -1,0 +1,1002 @@
+[
+  {
+    "index": 0,
+    "raw_text": "是肯定要的。",
+    "char_count": 6,
+    "prompt": "polish",
+    "doubao_output": "这肯定是需要的。",
+    "doubao_time": 1.072,
+    "qwen_output": "是的，需要。",
+    "qwen_time": 0.307
+  },
+  {
+    "index": 0,
+    "raw_text": "是肯定要的。",
+    "char_count": 6,
+    "prompt": "translate",
+    "doubao_output": "That's definitely a must.",
+    "doubao_time": 0.708,
+    "qwen_output": "Yes, it's definitely needed.",
+    "qwen_time": 0.329
+  },
+  {
+    "index": 1,
+    "raw_text": "豆包啥情况下会花20多秒啊，这个有点夸张啊。",
+    "char_count": 22,
+    "prompt": "polish",
+    "doubao_output": "豆包在什么情况下响应会花二十多秒啊，这个时长有点夸张了。",
+    "doubao_time": 0.821,
+    "qwen_output": "豆包在什么情况下会花费20多秒，这个时间有点夸张。",
+    "qwen_time": 0.436
+  },
+  {
+    "index": 1,
+    "raw_text": "豆包啥情况下会花20多秒啊，这个有点夸张啊。",
+    "char_count": 22,
+    "prompt": "translate",
+    "doubao_output": "Under what circumstances would Doubao take more than 20 seconds to respond? That's a bit exaggerated.",
+    "doubao_time": 1.486,
+    "qwen_output": "Why would Dao Bao take more than 20 seconds? That seems a bit exaggerated.",
+    "qwen_time": 0.492
+  },
+  {
+    "index": 2,
+    "raw_text": "这个质量太差了。",
+    "char_count": 8,
+    "prompt": "polish",
+    "doubao_output": "这个质量太差了。",
+    "doubao_time": 0.796,
+    "qwen_output": "质量较差。",
+    "qwen_time": 0.276
+  },
+  {
+    "index": 2,
+    "raw_text": "这个质量太差了。",
+    "char_count": 8,
+    "prompt": "translate",
+    "doubao_output": "The quality is terrible.",
+    "doubao_time": 0.579,
+    "qwen_output": "The quality is really poor.",
+    "qwen_time": 0.328
+  },
+  {
+    "index": 3,
+    "raw_text": "不然你热词不改的话，他也兜不住吧。",
+    "char_count": 17,
+    "prompt": "polish",
+    "doubao_output": "如果不修改热词的话，应该也兜不住吧。",
+    "doubao_time": 1.112,
+    "qwen_output": "如果不修改热词，他恐怕难以应对。",
+    "qwen_time": 0.374
+  },
+  {
+    "index": 3,
+    "raw_text": "不然你热词不改的话，他也兜不住吧。",
+    "char_count": 17,
+    "prompt": "translate",
+    "doubao_output": "Otherwise, if you don't update the hotwords, it won't be able to handle this properly, right?",
+    "doubao_time": 1.928,
+    "qwen_output": "Otherwise, if you don't change the keywords, he won't be able to keep up.",
+    "qwen_time": 0.474
+  },
+  {
+    "index": 4,
+    "raw_text": "我还以为你们是找公具方收的中介费呢。",
+    "char_count": 18,
+    "prompt": "polish",
+    "doubao_output": "我还以为你们是找公共供方收的中介费呢。",
+    "doubao_time": 1.503,
+    "qwen_output": "我误以为你们是通过公具方收取中介费用。",
+    "qwen_time": 0.42
+  },
+  {
+    "index": 4,
+    "raw_text": "我还以为你们是找公具方收的中介费呢。",
+    "char_count": 18,
+    "prompt": "translate",
+    "doubao_output": "I thought you guys had the party bearing the construction costs pay the agency fee.",
+    "doubao_time": 1.566,
+    "qwen_output": "I thought you were paying the intermediary fee to the public agency.",
+    "qwen_time": 0.4
+  },
+  {
+    "index": 5,
+    "raw_text": "八成是AI写的。",
+    "char_count": 8,
+    "prompt": "polish",
+    "doubao_output": "八成是AI写的。",
+    "doubao_time": 0.734,
+    "qwen_output": "八成是AI创作的。",
+    "qwen_time": 0.321
+  },
+  {
+    "index": 5,
+    "raw_text": "八成是AI写的。",
+    "char_count": 8,
+    "prompt": "translate",
+    "doubao_output": "It's most likely written by AI.",
+    "doubao_time": 0.639,
+    "qwen_output": "Eighty percent of it was written by AI.",
+    "qwen_time": 0.361
+  },
+  {
+    "index": 6,
+    "raw_text": "八成是AI鞋。",
+    "char_count": 7,
+    "prompt": "polish",
+    "doubao_output": "八成是AI制的鞋子。",
+    "doubao_time": 0.821,
+    "qwen_output": "八成是AI鞋。",
+    "qwen_time": 0.309
+  },
+  {
+    "index": 6,
+    "raw_text": "八成是AI鞋。",
+    "char_count": 7,
+    "prompt": "translate",
+    "doubao_output": "It's most likely an AI-generated shoe.",
+    "doubao_time": 1.203,
+    "qwen_output": "Eighty percent is AI shoes.",
+    "qwen_time": 0.335
+  },
+  {
+    "index": 7,
+    "raw_text": "你从历史记录里面直接扒一些记录8个50条吧，然后分别跑一下我们现在配的豆包的模型和这个本地模型，主要套用现在的语音润色和英文翻译这两个prot，跟我汇总一下结果，需要包括他们的输出质量和速度。",
+    "char_count": 96,
+    "prompt": "polish",
+    "doubao_output": "你从历史记录里直接提取数据，一共整理出8组共50条记录，分别用我们当前配置的豆包模型和该本地模型运行测试，主要套用现有的语音润色、英文翻译两个prompt，给我汇总测试结果，需要涵盖两个模型的输出质量和输出速度。",
+    "doubao_time": 1.994,
+    "qwen_output": "从历史记录中直接提取8个50条记录，分别运行当前使用的豆包模型和本地模型，主要测试语音润色和英文翻译两个功能。请将测试结果汇总，包括两个模型的输出质量及运行速度。",
+    "qwen_time": 0.863
+  },
+  {
+    "index": 7,
+    "raw_text": "你从历史记录里面直接扒一些记录8个50条吧，然后分别跑一下我们现在配的豆包的模型和这个本地模型，主要套用现在的语音润色和英文翻译这两个prot，跟我汇总一下结果，需要包括他们的输出质量和速度。",
+    "char_count": 96,
+    "prompt": "translate",
+    "doubao_output": "Just pull 50 records (8 groups of them) directly from the history, then run inference on both our current Doubao model and this local model separately. Use our current existing prompts for speech polishing and English translation for the tests, then summarize the results for me, including their output quality and inference speed.",
+    "doubao_time": 1.626,
+    "qwen_output": "Take 80 records directly from the history log, run the current DaoBao model and the local model separately, mainly using the current voice polishing and English translation protocols. Summarize the results, including output quality and speed.",
+    "qwen_time": 0.825
+  },
+  {
+    "index": 8,
+    "raw_text": "你看一下sense voice的热词和映射生效了没有已经用用的是流式识别还是完整的录音识别？",
+    "char_count": 46,
+    "prompt": "polish",
+    "doubao_output": "请你查看一下sense voice的热词和映射是否已经生效，目前使用的是流式识别还是完整录音识别？",
+    "doubao_time": 1.462,
+    "qwen_output": "请查看sense voice的热词和映射是否已生效，目前使用的是流式识别还是完整的录音识别？",
+    "qwen_time": 0.555
+  },
+  {
+    "index": 8,
+    "raw_text": "你看一下sense voice的热词和映射生效了没有已经用用的是流式识别还是完整的录音识别？",
+    "char_count": 46,
+    "prompt": "translate",
+    "doubao_output": "Check whether the hotwords and mapping of SenseVoice have taken effect. And confirm whether you're using streaming recognition or full audio recording recognition.",
+    "doubao_time": 1.279,
+    "qwen_output": "Has the hot words and mappings for Sense Voice taken effect? Are you using stream-based recognition or full recording recognition?",
+    "qwen_time": 0.537
+  },
+  {
+    "index": 9,
+    "raw_text": "不是，你没有对比那个本地模型吗？",
+    "char_count": 16,
+    "prompt": "polish",
+    "doubao_output": "不对吗，你没有对比过本地模型吗？",
+    "doubao_time": 1.252,
+    "qwen_output": "你是否已经对比过本地模型？",
+    "qwen_time": 0.337
+  },
+  {
+    "index": 9,
+    "raw_text": "不是，你没有对比那个本地模型吗？",
+    "char_count": 16,
+    "prompt": "translate",
+    "doubao_output": "Wait, didn't you compare that local model?",
+    "doubao_time": 1.438,
+    "qwen_output": "Did you compare that local model?",
+    "qwen_time": 0.334
+  },
+  {
+    "index": 10,
+    "raw_text": "从现在爬到的数据里面",
+    "char_count": 10,
+    "prompt": "polish",
+    "doubao_output": "从目前已经爬取到的数据来看",
+    "doubao_time": 0.713,
+    "qwen_output": "从现在开始的数据中。",
+    "qwen_time": 0.31
+  },
+  {
+    "index": 10,
+    "raw_text": "从现在爬到的数据里面",
+    "char_count": 10,
+    "prompt": "translate",
+    "doubao_output": "Based on the data we've crawled so far",
+    "doubao_time": 0.633,
+    "qwen_output": "From the data crawled so far.",
+    "qwen_time": 0.328
+  },
+  {
+    "index": 11,
+    "raw_text": "放进去了，你去看一下。",
+    "char_count": 11,
+    "prompt": "polish",
+    "doubao_output": "已经放进去了，你去看一下。",
+    "doubao_time": 0.991,
+    "qwen_output": "你把它放进去吧，我让你看看。",
+    "qwen_time": 0.353
+  },
+  {
+    "index": 11,
+    "raw_text": "放进去了，你去看一下。",
+    "char_count": 11,
+    "prompt": "translate",
+    "doubao_output": "It's put in. Go check it out.",
+    "doubao_time": 0.643,
+    "qwen_output": "Put it in, and you check.",
+    "qwen_time": 0.341
+  },
+  {
+    "index": 12,
+    "raw_text": "打开一下我们那个公寓租金监控的网页。",
+    "char_count": 18,
+    "prompt": "polish",
+    "doubao_output": "打开我们公寓租金监控的网页。",
+    "doubao_time": 0.649,
+    "qwen_output": "打开公寓租金监控的网页。",
+    "qwen_time": 0.323
+  },
+  {
+    "index": 12,
+    "raw_text": "打开一下我们那个公寓租金监控的网页。",
+    "char_count": 18,
+    "prompt": "translate",
+    "doubao_output": "Open the web page for our apartment rent monitoring.",
+    "doubao_time": 0.782,
+    "qwen_output": "Open the webpage for our apartment rent monitoring.",
+    "qwen_time": 0.35
+  },
+  {
+    "index": 13,
+    "raw_text": "看一下 Typeform 文件夹里面的这一个文档，我们来做这个需求。",
+    "char_count": 34,
+    "prompt": "polish",
+    "doubao_output": "请查看Typeform文件夹里的这份文档，我们来处理这个需求。",
+    "doubao_time": 0.724,
+    "qwen_output": "请查看 Typeform 文件夹中的该文档，我们开始处理这个需求。",
+    "qwen_time": 0.43
+  },
+  {
+    "index": 13,
+    "raw_text": "看一下 Typeform 文件夹里面的这一个文档，我们来做这个需求。",
+    "char_count": 34,
+    "prompt": "translate",
+    "doubao_output": "Take a look at the document inside the Typeform folder, and we'll work on this requirement.",
+    "doubao_time": 0.727,
+    "qwen_output": "Check the document in the Typeform folder and let's proceed with this request.",
+    "qwen_time": 0.429
+  },
+  {
+    "index": 14,
+    "raw_text": "这个 session 的上下文已经太长了，你写个计划，然后我们新开一个 session 来做吧。",
+    "char_count": 48,
+    "prompt": "polish",
+    "doubao_output": "当前会话的上下文已经太长了，你先整理出一份计划，我们新开一个会话来推进这件事吧。",
+    "doubao_time": 4.254,
+    "qwen_output": "本 session 的上下文已过于冗长，建议你先制定一个计划，然后我们开启一个新的 session 进行后续工作。",
+    "qwen_time": 0.59
+  },
+  {
+    "index": 14,
+    "raw_text": "这个 session 的上下文已经太长了，你写个计划，然后我们新开一个 session 来做吧。",
+    "char_count": 48,
+    "prompt": "translate",
+    "doubao_output": "This session's context has gotten too long. Could you draft a plan, and we'll start a new session to work on this?",
+    "doubao_time": 0.847,
+    "qwen_output": "This session's context has been too long. Write a plan, and then we can start a new session.",
+    "qwen_time": 0.521
+  },
+  {
+    "index": 15,
+    "raw_text": "第一批你找一些样例，我们先测10个句子吧。告诉我怎么录给你比较好。",
+    "char_count": 33,
+    "prompt": "polish",
+    "doubao_output": "你先找一批样例，我们先测试10个句子。另外请告诉我，用什么方式把录制好的内容发给你比较合适。",
+    "doubao_time": 2.017,
+    "qwen_output": "首先，您需要准备一些样例。我们先测试10个句子。请告诉我如何录制并发送给您。",
+    "qwen_time": 0.531
+  },
+  {
+    "index": 15,
+    "raw_text": "第一批你找一些样例，我们先测10个句子吧。告诉我怎么录给你比较好。",
+    "char_count": 33,
+    "prompt": "translate",
+    "doubao_output": "First, you can find some samples, and let's test 10 sentences to start with. Also, let me know what the best way is for you to record them and send them to me.",
+    "doubao_time": 1.108,
+    "qwen_output": "First, you can find some examples. Let's test 10 sentences. Tell me how you'd like me to record them.",
+    "qwen_time": 0.579
+  },
+  {
+    "index": 16,
+    "raw_text": "然后测试模式上，我们搭建一个流程吧。我把音频文件录好给你，你自己去跑脚本测试，这样高效一些。我用苹果的系统备忘录 后来录可以吗？",
+    "char_count": 64,
+    "prompt": "polish",
+    "doubao_output": "那我们在测试模式上搭建一个流程：我把录好的音频文件发给你，你自己跑脚本测试，这样效率更高一些。我用苹果系统备忘录来录音可以吗？",
+    "doubao_time": 1.111,
+    "qwen_output": "在测试模式中，我们先搭建一个流程。我将音频文件录制好发给你，你自行运行脚本进行测试，这样会更高效。我用苹果系统的备忘录来录可以吗？",
+    "qwen_time": 0.778
+  },
+  {
+    "index": 16,
+    "raw_text": "然后测试模式上，我们搭建一个流程吧。我把音频文件录好给你，你自己去跑脚本测试，这样高效一些。我用苹果的系统备忘录 后来录可以吗？",
+    "char_count": 64,
+    "prompt": "translate",
+    "doubao_output": "Then for the testing mode, let's set up a workflow: I'll record the audio files and send them to you, and you can run the script test yourself. That should be more efficient. Can I record the audio on my Apple system's Notes app instead?",
+    "doubao_time": 1.731,
+    "qwen_output": "Then, in test mode, let's set up a process. I'll record the audio file for you, and you can run the script yourself, which will be more efficient. Can I record it using Apple's Notes?",
+    "qwen_time": 0.776
+  },
+  {
+    "index": 17,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "polish",
+    "doubao_output": "有额外的费用吗？",
+    "doubao_time": 1.04,
+    "qwen_output": "是否有额外费用？",
+    "qwen_time": 0.292
+  },
+  {
+    "index": 17,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "translate",
+    "doubao_output": "Is there any extra charge?",
+    "doubao_time": 1.153,
+    "qwen_output": "Are there any additional charges?",
+    "qwen_time": 0.322
+  },
+  {
+    "index": 18,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "polish",
+    "doubao_output": "有额外的费用吗？",
+    "doubao_time": 1.193,
+    "qwen_output": "是否有额外费用？",
+    "qwen_time": 0.297
+  },
+  {
+    "index": 18,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "translate",
+    "doubao_output": "Is there an extra charge?",
+    "doubao_time": 0.865,
+    "qwen_output": "Are there any additional charges?",
+    "qwen_time": 0.317
+  },
+  {
+    "index": 19,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "polish",
+    "doubao_output": "有额外的费用吗？",
+    "doubao_time": 0.626,
+    "qwen_output": "是否有额外费用？",
+    "qwen_time": 0.289
+  },
+  {
+    "index": 19,
+    "raw_text": "有额外的费用吗？",
+    "char_count": 8,
+    "prompt": "translate",
+    "doubao_output": "Is there an extra charge?",
+    "doubao_time": 1.452,
+    "qwen_output": "Are there any additional charges?",
+    "qwen_time": 0.323
+  },
+  {
+    "index": 20,
+    "raw_text": "然后你主要结合现在火灾引擎的热词特性，还有我们本地sense voice的这个模型的特性，考虑一下这些热词应该怎么配置和如何生效，然后给我写一些中英混杂的例句，我去测试一下。",
+    "char_count": 87,
+    "prompt": "polish",
+    "doubao_output": "请你结合当前火灾引擎的热词特性，以及我们本地SenseVoice模型的特性，思考这些热词应该如何配置与生效，再给我写一些中英混杂的例句供我测试。",
+    "doubao_time": 1.576,
+    "qwen_output": "请你结合当前火灾引擎的热词特性，以及我们本地Sense Voice模型的特性，考虑这些热词的配置方式和生效方法，并提供一些中英混杂的例句，供我进行测试。",
+    "qwen_time": 0.775
+  },
+  {
+    "index": 20,
+    "raw_text": "然后你主要结合现在火灾引擎的热词特性，还有我们本地sense voice的这个模型的特性，考虑一下这些热词应该怎么配置和如何生效，然后给我写一些中英混杂的例句，我去测试一下。",
+    "char_count": 87,
+    "prompt": "translate",
+    "doubao_output": "Then, based on the current hotword features of the fire engine model and the characteristics of our local SenseVoice model, figure out how these hotwords should be configured and how they take effect, and write some mixed Chinese-English example sentences for me to conduct tests.",
+    "doubao_time": 1.207,
+    "qwen_output": "Then you should mainly consider the hot words of the current fire engine model, as well as the characteristics of our local Sense Voice model, and think about how to configure and make these hot words effective. Please provide some example sentences that mix Chinese and English for me to test.",
+    "qwen_time": 0.909
+  },
+  {
+    "index": 21,
+    "raw_text": "中文热词基本都不需要。然后英文热词你需要考虑的不是我历史上其他的项目是什么样的，而是这个东西是要开放出去给大家用的。所以我私人的那些项目不需要，比如说电商和金融。但是嗯这个输入法现在比较关注的是关注AI领域的那些人。所以他们日常会用到的那些，特别是英文词汇是需要重点关注的。你可以再梳理一版。",
+    "char_count": 146,
+    "prompt": "polish",
+    "doubao_output": "中文热词基本都不需要。对于英文热词，你需要考虑的不是我过往其他项目的情况，而是这个产品是要开放给大众使用的，因此我私人涉及的电商、金融类项目不需要纳入考量。当前这款输入法的主要关注群体是从事AI领域的人群，他们日常会用到的英文词汇才是需要重点关注的对象，请你再梳理一版。",
+    "doubao_time": 1.481,
+    "qwen_output": "中文热词基本不需要考虑。英文热词的考量应聚焦于该产品未来对外开放使用的场景，而非我以往其他项目的做法。个人项目如电商和金融不需要关注。当前输入法更关注AI领域的用户，他们日常使用中涉及的英文词汇需要重点梳理。你可以重新整理一份。",
+    "qwen_time": 1.008
+  },
+  {
+    "index": 21,
+    "raw_text": "中文热词基本都不需要。然后英文热词你需要考虑的不是我历史上其他的项目是什么样的，而是这个东西是要开放出去给大家用的。所以我私人的那些项目不需要，比如说电商和金融。但是嗯这个输入法现在比较关注的是关注AI领域的那些人。所以他们日常会用到的那些，特别是英文词汇是需要重点关注的。你可以再梳理一版。",
+    "char_count": 146,
+    "prompt": "translate",
+    "doubao_output": "Virtually no trending Chinese terms are needed. For trending English terms, what you need to consider isn't what my other past projects were like — this tool is going to be opened up for public use. So my private niche projects like e-commerce and finance don't need to be taken into account. Right now, this input method is mainly targeted at people who focus on the AI field. So the terms they use on a daily basis, especially English vocabulary, are the ones we need to prioritize. Could you reorganize a new version accordingly?",
+    "doubao_time": 2.997,
+    "qwen_output": "Basic Chinese hot words are not necessary. When considering English hot words, you should focus on what people in the AI field actually use every day, rather than what other projects in my history look like. Therefore, my personal projects, such as e-commerce and finance, don't need to be considered. However, the current input method is more focused on people in the AI field. So, the English words they use daily, especially those related to AI, should be given particular attention. You can revise it again.",
+    "qwen_time": 1.459
+  },
+  {
+    "index": 22,
+    "raw_text": "难道没有更快的方式了吗？这个还是太慢了。",
+    "char_count": 20,
+    "prompt": "polish",
+    "doubao_output": "难道没有更快的方式了吗？目前这个方法处理速度还是太慢了。",
+    "doubao_time": 0.808,
+    "qwen_output": "难道没有更快的方法吗？这个方式仍然显得不够迅速。",
+    "qwen_time": 0.389
+  },
+  {
+    "index": 22,
+    "raw_text": "难道没有更快的方式了吗？这个还是太慢了。",
+    "char_count": 20,
+    "prompt": "translate",
+    "doubao_output": "Isn't there a faster way? This is still too slow.",
+    "doubao_time": 0.777,
+    "qwen_output": "Is there a faster way? This is still too slow.",
+    "qwen_time": 0.384
+  },
+  {
+    "index": 23,
+    "raw_text": "你这个文件。",
+    "char_count": 6,
+    "prompt": "polish",
+    "doubao_output": "你这个文件。",
+    "doubao_time": 0.563,
+    "qwen_output": "你这个文件。",
+    "qwen_time": 0.286
+  },
+  {
+    "index": 23,
+    "raw_text": "你这个文件。",
+    "char_count": 6,
+    "prompt": "translate",
+    "doubao_output": "This document you have here.",
+    "doubao_time": 0.669,
+    "qwen_output": "This file.",
+    "qwen_time": 0.285
+  },
+  {
+    "index": 24,
+    "raw_text": "我有clash party的代理啊，你可以用啊。",
+    "char_count": 24,
+    "prompt": "polish",
+    "doubao_output": "我有Clash Party的代理，你可以使用。",
+    "doubao_time": 0.802,
+    "qwen_output": "我有Clash Party的代理，你可以使用。",
+    "qwen_time": 0.372
+  },
+  {
+    "index": 24,
+    "raw_text": "我有clash party的代理啊，你可以用啊。",
+    "char_count": 24,
+    "prompt": "translate",
+    "doubao_output": "I have a proxy for Clash Party, you can use it.",
+    "doubao_time": 1.153,
+    "qwen_output": "I have a Clash Party proxy, you can use it.",
+    "qwen_time": 0.389
+  },
+  {
+    "index": 25,
+    "raw_text": "贷款的时候我有clash party的代理的拖垮的。",
+    "char_count": 26,
+    "prompt": "polish",
+    "doubao_output": "贷款的时候，我被Cash Party的代理坑了。",
+    "doubao_time": 2.035,
+    "qwen_output": "贷款时，我使用了Clash Party的代理，导致系统崩溃。",
+    "qwen_time": 0.432
+  },
+  {
+    "index": 25,
+    "raw_text": "贷款的时候我有clash party的代理的拖垮的。",
+    "char_count": 26,
+    "prompt": "translate",
+    "doubao_output": "When I applied for the loan, my application was held back because I was an agent for Clash Party.",
+    "doubao_time": 0.83,
+    "qwen_output": "When I applied for the loan, I had a clash with the agent from the party.",
+    "qwen_time": 0.448
+  },
+  {
+    "index": 26,
+    "raw_text": "我想要给type for me的项目建一个完整的热词和映射词的词表，用来覆盖日常使用里面涉及到的一些名词。现在中文语境下到还好，主要是一些同音词有时候不是很准，这个可能主要用热词来做会比较好。但是英文场景可能是因为模型本身更缺少上下文，所以词汇的识别不是很准。比如说外 coding和外这两个词就是重灾区这个可能要通过更强的就是逻辑映射来关联。并且逻辑映射要支持多对一的关系，就是把一个词可能会被识别出来的多个错误的可能性都统一映射到我要的词，但我现在自己来整理这个词表太麻烦了。你帮我结合我日常使用的语境，综合想一想，可能会可以做哪一些词到词表里面，可以多想一些，我们再来同一review就好了。",
+    "char_count": 299,
+    "prompt": "polish",
+    "doubao_output": "我打算给`type for me`项目搭建一套完整的热词与映射词表，用来覆盖日常使用中涉及的各类名词。目前中文语境的表现还不错，问题主要出在同音词识别不准确，这类问题通过热词机制就能解决。但英文场景下，由于模型本身缺少上下文支撑，词汇识别准确率很低。比如`coding`一词识别错误就是重灾区，这类问题需要更精准的逻辑映射来处理：逻辑映射需要支持多对一关系，把同一个目标词可能出现的多种识别错误结果，统一映射到正确的目标词上。\n\n现在手动整理这份词表工作量太大，麻烦你结合我日常的使用场景，梳理一下应该加入词表的词汇，可以多列一些备选，之后我们再一起统一复核。",
+    "doubao_time": 2.349,
+    "qwen_output": "我想要为“type for me”项目建立一个完整的热词和映射词词表，用于覆盖日常使用中涉及的一些名词。在中文语境下，情况尚可，但存在一些同音词识别不够准确的问题，这可能更适合通过热词来解决。然而，在英文语境下，由于模型本身缺乏上下文，词汇识别不够准确。例如，“外 coding”和“外”这两个词就是典型问题，这可能需要通过更强的逻辑映射来关联。逻辑映射需要支持多对一的关系，即把一个词可能被识别出的多个错误形式统一映射到目标词。但目前我自己整理这个词表非常麻烦。请你结合我日常使用的语境，综合考虑，想一想可以将哪些词加入词表，尽量多想一些，我们再一起评审一下。",
+    "qwen_time": 2.371
+  },
+  {
+    "index": 26,
+    "raw_text": "我想要给type for me的项目建一个完整的热词和映射词的词表，用来覆盖日常使用里面涉及到的一些名词。现在中文语境下到还好，主要是一些同音词有时候不是很准，这个可能主要用热词来做会比较好。但是英文场景可能是因为模型本身更缺少上下文，所以词汇的识别不是很准。比如说外 coding和外这两个词就是重灾区这个可能要通过更强的就是逻辑映射来关联。并且逻辑映射要支持多对一的关系，就是把一个词可能会被识别出来的多个错误的可能性都统一映射到我要的词，但我现在自己来整理这个词表太麻烦了。你帮我结合我日常使用的语境，综合想一想，可能会可以做哪一些词到词表里面，可以多想一些，我们再来同一review就好了。",
+    "char_count": 299,
+    "prompt": "translate",
+    "doubao_output": "I want to build a complete hot word and mapping word list for the \"type for me\" project to cover nouns involved in daily use. Right now, things are okay in Chinese contexts: the main issue is inaccuracy with homophones, which can probably be handled well mainly using hot words. But for English scenarios, likely because the model itself lacks more context, word recognition is not very accurate. For example, \"outside coding\" and \"outside\" are heavily misrecognized — this might need to be handled by stronger logical mapping. Also, the logical mapping needs to support many-to-one relationships: that is, all the multiple possible incorrect recognition results of one target word should be uniformly mapped to the word I actually want. But sorting out this word list by myself is too much trouble. Could you help me brainstorm which words should be added to the list based on my daily use context, come up with as many as possible, and we'll review them all together later.",
+    "doubao_time": 2.179,
+    "qwen_output": "I want to create a complete vocabulary list with hot words and mapping words for the \"type for me\" project, to cover some nouns that are commonly used in daily conversations. In the Chinese context, it's okay, but sometimes homonyms can be inaccurate, so using hot words might be better in that case. However, in the English context, the model itself may lack context, leading to less accurate word recognition. For example, words like \"outer\" and \"out\" are common issues, and this might require stronger logical mapping to associate them. The logical mapping should also support many-to-one relationships, meaning that multiple possible incorrect identifications of a word can be mapped to the correct term. But currently, it's too tedious for me to manually create this vocabulary list. Please help me think about which words could be included in the vocabulary list based on my daily usage. Let's discuss it further and review it together.",
+    "qwen_time": 2.497
+  },
+  {
+    "index": 27,
+    "raw_text": "还有一个问题是我们现在本地识别的那个选项里面，括号还写的是performer，把那个改掉吧。",
+    "char_count": 46,
+    "prompt": "polish",
+    "doubao_output": "还有一个问题：我们现在本地识别的选项里，括号里标注的还是performer，麻烦把它改掉。",
+    "doubao_time": 0.954,
+    "qwen_output": "还有一个问题，当前本地识别的选项中，括号里写的是“performer”，需要将这个修改一下。",
+    "qwen_time": 0.527
+  },
+  {
+    "index": 27,
+    "raw_text": "还有一个问题是我们现在本地识别的那个选项里面，括号还写的是performer，把那个改掉吧。",
+    "char_count": 46,
+    "prompt": "translate",
+    "doubao_output": "Another issue is that right now, in our local recognition options, \"performer\" is still written in the brackets. Please change that.",
+    "doubao_time": 1.037,
+    "qwen_output": "There's another issue: in the local recognition option, the parentheses still say \"performer\"—let's change that.",
+    "qwen_time": 0.543
+  },
+  {
+    "index": 28,
+    "raw_text": "你评估的那个跟这个E思里面说的是同一回事吗？那你可以回复一下他。",
+    "char_count": 32,
+    "prompt": "polish",
+    "doubao_output": "你评估的内容和这份E思里面提到的是同一回事吗？你可以回复一下对方。",
+    "doubao_time": 0.835,
+    "qwen_output": "你评估的内容与E思中提到的是否是同一回事？可以回复他。",
+    "qwen_time": 0.451
+  },
+  {
+    "index": 28,
+    "raw_text": "你评估的那个跟这个E思里面说的是同一回事吗？那你可以回复一下他。",
+    "char_count": 32,
+    "prompt": "translate",
+    "doubao_output": "Is what you assessed the same thing as what's mentioned in this EIS? Could you reply to them about that?",
+    "doubao_time": 0.986,
+    "qwen_output": "Did the evaluation you mentioned earlier refer to the same thing as the one in the E system? Then you can reply to him.",
+    "qwen_time": 0.563
+  },
+  {
+    "index": 29,
+    "raw_text": "发之前内容都先跟我过一下。",
+    "char_count": 13,
+    "prompt": "polish",
+    "doubao_output": "所有内容发布之前都先给我过目一下。",
+    "doubao_time": 1.334,
+    "qwen_output": "发之前内容都先跟我过一下。",
+    "qwen_time": 0.351
+  },
+  {
+    "index": 29,
+    "raw_text": "发之前内容都先跟我过一下。",
+    "char_count": 13,
+    "prompt": "translate",
+    "doubao_output": "Get everything approved by me first before sending it out.",
+    "doubao_time": 1.571,
+    "qwen_output": "Check the content before sending it.",
+    "qwen_time": 0.335
+  },
+  {
+    "index": 30,
+    "raw_text": "行吧，那你准备发布。",
+    "char_count": 10,
+    "prompt": "polish",
+    "doubao_output": "行吧，那你准备发布吧。",
+    "doubao_time": 0.558,
+    "qwen_output": "好的，你准备发布。",
+    "qwen_time": 0.31
+  },
+  {
+    "index": 30,
+    "raw_text": "行吧，那你准备发布。",
+    "char_count": 10,
+    "prompt": "translate",
+    "doubao_output": "Okay, then you can go ahead and publish it.",
+    "doubao_time": 0.838,
+    "qwen_output": "Okay, go ahead and release it.",
+    "qwen_time": 0.339
+  },
+  {
+    "index": 31,
+    "raw_text": "你有没有之前的录音可以用啊？",
+    "char_count": 14,
+    "prompt": "polish",
+    "doubao_output": "你有没有之前可用的录音？",
+    "doubao_time": 1.243,
+    "qwen_output": "您是否有之前的录音可以提供？",
+    "qwen_time": 0.325
+  },
+  {
+    "index": 31,
+    "raw_text": "你有没有之前的录音可以用啊？",
+    "char_count": 14,
+    "prompt": "translate",
+    "doubao_output": "Do you have any previous recordings available to use?",
+    "doubao_time": 0.941,
+    "qwen_output": "Do you have any previous recordings you can use?",
+    "qwen_time": 0.362
+  },
+  {
+    "index": 32,
+    "raw_text": "等等，先做完测试吧。",
+    "char_count": 10,
+    "prompt": "polish",
+    "doubao_output": "等等，先把测试做完吧。",
+    "doubao_time": 2.022,
+    "qwen_output": "先完成测试。",
+    "qwen_time": 0.294
+  },
+  {
+    "index": 32,
+    "raw_text": "等等，先做完测试吧。",
+    "char_count": 10,
+    "prompt": "translate",
+    "doubao_output": "Wait, let's finish the test first.",
+    "doubao_time": 1.073,
+    "qwen_output": "Wait, let's finish the test first.",
+    "qwen_time": 0.354
+  },
+  {
+    "index": 33,
+    "raw_text": "明白了，那我们应该把这个逻辑内嵌在整个热词的存储里面，就用户不需要去理解这个热词是怎么拆分的，但你需要在用户保存完一个热词之后，给他做好拆分是模型能够理解。但还有一个问题，这个拆分方式是对所有模型都适用的吗？比如说我们现在的配置是同一套热词，但是模型用户可能会切换到火山或者本地的这个sense voice。那要怎么办呢？。",
+    "char_count": 162,
+    "prompt": "polish",
+    "doubao_output": "明白了，我们应该把这个逻辑内嵌到整个热词的存储流程中：用户不需要理解热词具体是怎么拆分的，但我们需要在用户保存完热词后，提前完成拆分处理，让模型能够理解。但这里还有一个问题：这种拆分方式对所有模型都适用吗？比如现在我们用的是同一套热词配置，但用户可能会切换到火山或者本地的Sense Voice模型，这种情况要怎么处理？",
+    "doubao_time": 2.094,
+    "qwen_output": "明白了，我们应将这一逻辑嵌入到整个热词的存储过程中。用户无需理解热词的拆分方式，但需在用户保存完一个热词后，确保其拆分方式符合模型的理解需求。然而，还有一个问题需要解决：这种拆分方式是否适用于所有模型？例如，当前配置使用的是同一套热词，但用户可能切换到火山或本地的Sense Voice模型。在这种情况下，应如何处理？",
+    "qwen_time": 1.369
+  },
+  {
+    "index": 33,
+    "raw_text": "明白了，那我们应该把这个逻辑内嵌在整个热词的存储里面，就用户不需要去理解这个热词是怎么拆分的，但你需要在用户保存完一个热词之后，给他做好拆分是模型能够理解。但还有一个问题，这个拆分方式是对所有模型都适用的吗？比如说我们现在的配置是同一套热词，但是模型用户可能会切换到火山或者本地的这个sense voice。那要怎么办呢？。",
+    "char_count": 162,
+    "prompt": "translate",
+    "doubao_output": "Got it. Then we should embed this logic into the entire hotword storage system. Users don't need to understand how hotwords are split, but after a user saves a hotword, you need to complete the splitting process so that the model can understand it. But there's still one question: is this splitting method applicable to all models? For example, right now we have a single set of hotword configuration, but users may switch their model to Volcano, or the local SenseVoice. How should we handle this?",
+    "doubao_time": 2.23,
+    "qwen_output": "We should embed this logic into the entire hotword storage system. That way, users don't need to understand how the hotwords are split. However, after a user saves a hotword, you need to ensure that the splitting is done in a way that the model can understand. But there's another question: is this splitting method applicable to all models? For example, our current configuration uses the same set of hotwords, but users might switch to火山 or the local sense voice model. What should we do in that case?",
+    "qwen_time": 1.504
+  },
+  {
+    "index": 34,
+    "raw_text": "你是不是看错了type for me这种怎么会在模型的词表里面？",
+    "char_count": 32,
+    "prompt": "polish",
+    "doubao_output": "你是不是看错了，`type for me`这种内容怎么会出现在模型的词表里面？",
+    "doubao_time": 0.943,
+    "qwen_output": "你是不是看错了“type for me”这种表达，为什么它会出现在模型的词表中？",
+    "qwen_time": 0.492
+  },
+  {
+    "index": 34,
+    "raw_text": "你是不是看错了type for me这种怎么会在模型的词表里面？",
+    "char_count": 32,
+    "prompt": "translate",
+    "doubao_output": "Did you misread this? How could \"type for me\" be in the model's vocabulary?",
+    "doubao_time": 1.039,
+    "qwen_output": "Did you misread \"type for me\" and why is this phrase still in the model's vocabulary?",
+    "qwen_time": 0.509
+  },
+  {
+    "index": 35,
+    "raw_text": "他不在词表里的话，我能给他加进词表里吗？",
+    "char_count": 20,
+    "prompt": "polish",
+    "doubao_output": "如果它不在词表里，我能把它添加进词表吗？",
+    "doubao_time": 1.575,
+    "qwen_output": "如果该词不在词表中，我可以将其添加到词表中吗？",
+    "qwen_time": 0.444
+  },
+  {
+    "index": 35,
+    "raw_text": "他不在词表里的话，我能给他加进词表里吗？",
+    "char_count": 20,
+    "prompt": "translate",
+    "doubao_output": "If it's not already in the vocabulary list, can I add it to the list?",
+    "doubao_time": 1.044,
+    "qwen_output": "If he's not in the word list, can I add him to the word list?",
+    "qwen_time": 0.477
+  },
+  {
+    "index": 36,
+    "raw_text": "你前面那个参数beam size，我们也是需要有热词的呀。",
+    "char_count": 29,
+    "prompt": "polish",
+    "doubao_output": "你刚才提到的beam size参数，我们同样也需要为它配置热词。",
+    "doubao_time": 1.23,
+    "qwen_output": "您前面提到的beam size参数，我们也需要设置热词。",
+    "qwen_time": 0.409
+  },
+  {
+    "index": 36,
+    "raw_text": "你前面那个参数beam size，我们也是需要有热词的呀。",
+    "char_count": 29,
+    "prompt": "translate",
+    "doubao_output": "We also need to include hot terms for the beam size parameter you mentioned earlier.",
+    "doubao_time": 0.656,
+    "qwen_output": "You also need to have hot words for the beam size parameter in front of you.",
+    "qwen_time": 0.468
+  },
+  {
+    "index": 37,
+    "raw_text": "今天更新一个版本，直接常驻doc来。",
+    "char_count": 18,
+    "prompt": "polish",
+    "doubao_output": "今天更新一个版本，直接让它常驻在文档里了。",
+    "doubao_time": 0.616,
+    "qwen_output": "今天更新一个版本，直接常驻doc。",
+    "qwen_time": 0.356
+  },
+  {
+    "index": 37,
+    "raw_text": "今天更新一个版本，直接常驻doc来。",
+    "char_count": 18,
+    "prompt": "translate",
+    "doubao_output": "Today we're rolling out an update, and we'll make it permanently available on Doc from now on.",
+    "doubao_time": 1.392,
+    "qwen_output": "Here's an updated version, just keep it in the doc.",
+    "qwen_time": 0.399
+  },
+  {
+    "index": 38,
+    "raw_text": "Actually, I do some test today, and I change it to Alibaba's new local AR model. I found it is quite good. This sentence is. I use this new model to test. and you can see how accurate it is. I didn't do any change. I will update this version today and package it into the DN G so that you can directly download and use it.",
+    "char_count": 322,
+    "prompt": "polish",
+    "doubao_output": "Actually, I ran some tests today after switching to Alibaba's new local AR model, and I found that its performance is quite good. I tested it with this new model, and you can see how accurate the result is — I didn't make any adjustments at all. I will update this version today and package it into the DNG, so you can directly download and use it.",
+    "doubao_time": 1.799,
+    "qwen_output": "实际上，我今天进行了一些测试，并将模型切换为阿里云的新本地AR模型。我发现这个模型表现 quite 好。我使用这个新模型进行测试，你可以看到它的准确性。我没有进行任何修改。今天我会更新这个版本，并将其打包到DN G中，以便你可以直接下载和使用。",
+    "qwen_time": 1.033
+  },
+  {
+    "index": 38,
+    "raw_text": "Actually, I do some test today, and I change it to Alibaba's new local AR model. I found it is quite good. This sentence is. I use this new model to test. and you can see how accurate it is. I didn't do any change. I will update this version today and package it into the DN G so that you can directly download and use it.",
+    "char_count": 322,
+    "prompt": "translate",
+    "doubao_output": "Actually, I ran some tests today and switched everything over to Alibaba's new local AR model, and I found it works really well. Let me explain: I tested it with this new model, and you can see how accurate it is. I didn't make any modifications to it. I'll push this updated version today and package it into the DNG so you can download and use it directly.",
+    "doubao_time": 1.372,
+    "qwen_output": "Actually, I did some tests today and switched to Alibaba's new local AR model. I found it to be quite good. I used this new model for the test, and you can see how accurate it is. I didn't make any changes. I will update this version today and package it into the DN G so that you can download and use it directly.",
+    "qwen_time": 1.109
+  },
+  {
+    "index": 39,
+    "raw_text": "But actually, I would like to consider about these things. Maybe it is okay for you.",
+    "char_count": 84,
+    "prompt": "polish",
+    "doubao_output": "But actually, I would like to think this through. It may be fine with you.",
+    "doubao_time": 0.959,
+    "qwen_output": "Actually, I would like to consider these matters. Perhaps it is acceptable for you.",
+    "qwen_time": 0.437
+  },
+  {
+    "index": 39,
+    "raw_text": "But actually, I would like to consider about these things. Maybe it is okay for you.",
+    "char_count": 84,
+    "prompt": "translate",
+    "doubao_output": "But actually, I'd like to think this over. Maybe that's fine with you.",
+    "doubao_time": 1.19,
+    "qwen_output": "But actually, I would like to consider those things. Maybe it's okay for you.",
+    "qwen_time": 0.484
+  },
+  {
+    "index": 40,
+    "raw_text": "我一直想不明白我为啥没被封。",
+    "char_count": 14,
+    "prompt": "polish",
+    "doubao_output": "我一直想不明白，我为什么没被封号。",
+    "doubao_time": 1.122,
+    "qwen_output": "我始终未能理解为何自己未被封禁。",
+    "qwen_time": 0.37
+  },
+  {
+    "index": 40,
+    "raw_text": "我一直想不明白我为啥没被封。",
+    "char_count": 14,
+    "prompt": "translate",
+    "doubao_output": "I've never been able to figure out why my account hasn't been banned yet.",
+    "doubao_time": 0.957,
+    "qwen_output": "I've always been confused as to why I wasn't banned.",
+    "qwen_time": 0.397
+  },
+  {
+    "index": 41,
+    "raw_text": "Trunk size padding，还有 beam sides这几个你要不上网搜一下它的推荐的设置都是什么样的。",
+    "char_count": 57,
+    "prompt": "polish",
+    "doubao_output": "关于Trunk size padding和beam sides的推荐设置，你可以上网搜索了解一下。",
+    "doubao_time": 0.934,
+    "qwen_output": "请查看“Trunk size padding”和“beam sides”的推荐设置，建议你上网搜索相关资料，了解其标准配置。",
+    "qwen_time": 0.558
+  },
+  {
+    "index": 41,
+    "raw_text": "Trunk size padding，还有 beam sides这几个你要不上网搜一下它的推荐的设置都是什么样的。",
+    "char_count": 57,
+    "prompt": "translate",
+    "doubao_output": "Could you look up the recommended settings for Trunk size padding and beam sides online?",
+    "doubao_time": 1.013,
+    "qwen_output": "Check the recommended settings for trunk size padding and beam sides by searching online.",
+    "qwen_time": 0.448
+  },
+  {
+    "index": 42,
+    "raw_text": "会有什么影响？对性能的要求会提高多少呢？",
+    "char_count": 20,
+    "prompt": "polish",
+    "doubao_output": "这会带来什么影响？对性能的要求会提高多少呢？",
+    "doubao_time": 1.239,
+    "qwen_output": "会有哪些影响？对性能的具体要求会提升多少？",
+    "qwen_time": 0.383
+  },
+  {
+    "index": 42,
+    "raw_text": "会有什么影响？对性能的要求会提高多少呢？",
+    "char_count": 20,
+    "prompt": "translate",
+    "doubao_output": "What impact will this have, and how much higher will the performance requirements be?",
+    "doubao_time": 0.969,
+    "qwen_output": "What impact will it have? How much will the performance requirements increase?",
+    "qwen_time": 0.408
+  },
+  {
+    "index": 43,
+    "raw_text": "接下来要列个计划，我们有几个事情要做，第一是要把这些bug改完。第二，我们得去giHub上面再统一看一下as。第三还得一起改一下。",
+    "char_count": 65,
+    "prompt": "polish",
+    "doubao_output": "接下来我们列一下计划，一共要做三件事：\n1. 把这些bug改完\n2. 到GitHub上统一查看相关内容\n3. 大家一起完成修改工作",
+    "doubao_time": 1.128,
+    "qwen_output": "接下来要制定一个计划，我们需要完成几项任务。第一，要彻底修复所有bug。第二，需要在GitHub上重新检查一下as部分。第三，还需要大家共同进行修改。",
+    "qwen_time": 0.719
+  },
+  {
+    "index": 43,
+    "raw_text": "接下来要列个计划，我们有几个事情要做，第一是要把这些bug改完。第二，我们得去giHub上面再统一看一下as。第三还得一起改一下。",
+    "char_count": 65,
+    "prompt": "translate",
+    "doubao_output": "Next, we need to make a plan. There are several tasks we need to complete:\nFirst, fix all these bugs.\nSecond, we need to go through everything uniformly on GitHub.\nThird, we have to revise it together as a team.",
+    "doubao_time": 1.176,
+    "qwen_output": "We need to make a plan. There are a few things we need to do. First, we need to fix all these bugs. Second, we should check the as again on GitHub. Third, we need to make the changes together.",
+    "qwen_time": 0.815
+  },
+  {
+    "index": 44,
+    "raw_text": "另外我们现在流置识别的时候是没有标点符号的，这个怎么解决啊，然后你再整体排查一下流置识别和录音识别这两种都分别还有哪一些参数可以调优列出来，我们确认一下。",
+    "char_count": 77,
+    "prompt": "polish",
+    "doubao_output": "另外我们目前做流式识别的时候输出是没有标点符号的，这个问题该怎么解决？另外请你整体排查一下，把流式识别和录音识别两种场景下分别还有哪些可以调优的参数整理列出来，我们进行确认。",
+    "doubao_time": 1.448,
+    "qwen_output": "另外，在进行流式识别时没有标点符号，这个问题该如何解决呢？请你再整体检查一下流式识别和录音识别这两种方式，分别列出可以优化的参数，我们确认一下。",
+    "qwen_time": 0.744
+  },
+  {
+    "index": 44,
+    "raw_text": "另外我们现在流置识别的时候是没有标点符号的，这个怎么解决啊，然后你再整体排查一下流置识别和录音识别这两种都分别还有哪一些参数可以调优列出来，我们确认一下。",
+    "char_count": 77,
+    "prompt": "translate",
+    "doubao_output": "In addition, currently our stream recognition doesn't output any punctuation. How can we fix this issue? Also, please conduct a full check and list all tunable parameters separately for both stream recognition and audio recording recognition, so we can review and confirm them.",
+    "doubao_time": 1.552,
+    "qwen_output": "Also, when we do streaming recognition, there are no punctuation marks. How can we solve this? Then, could you check again and list out the parameters that can be optimized for both streaming recognition and recording recognition? Let's confirm them.",
+    "qwen_time": 0.809
+  },
+  {
+    "index": 45,
+    "raw_text": "除了日文和韩文，还会有什么其他的语言比较容易被蹦出来吗？",
+    "char_count": 28,
+    "prompt": "polish",
+    "doubao_output": "除了日文和韩文，还有哪些其他语言比较容易出现？",
+    "doubao_time": 1.171,
+    "qwen_output": "除了日文和韩文，还有哪些其他语言比较容易被使用呢？",
+    "qwen_time": 0.442
+  },
+  {
+    "index": 45,
+    "raw_text": "除了日文和韩文，还会有什么其他的语言比较容易被蹦出来吗？",
+    "char_count": 28,
+    "prompt": "translate",
+    "doubao_output": "Besides Japanese and Korean, what other languages are likely to come up unexpectedly?",
+    "doubao_time": 1.148,
+    "qwen_output": "Besides Japanese and Korean, what other languages are likely to come up easily?",
+    "qwen_time": 0.446
+  },
+  {
+    "index": 46,
+    "raw_text": "我觉得日文和韩文这种是可以去掉的。但是我的使用场景里面经常会包括中文和英文。虽然英文可能大部分时候是以单词的形式出现的那像这个问题需要怎么解决呢？",
+    "char_count": 73,
+    "prompt": "polish",
+    "doubao_output": "我觉得日文和韩文这类语种的内容可以去掉，但我的使用场景里经常需要保留中文和英文。虽然英文大多是以单词形式出现，但这类情况该怎么解决呢？",
+    "doubao_time": 3.225,
+    "qwen_output": "我认为日文和韩文可以暂时去掉。在我的使用场景中，经常需要涉及中文和英文。虽然英文大多数时候是以单词形式出现的，但这个问题应该如何解决呢？",
+    "qwen_time": 0.704
+  },
+  {
+    "index": 46,
+    "raw_text": "我觉得日文和韩文这种是可以去掉的。但是我的使用场景里面经常会包括中文和英文。虽然英文可能大部分时候是以单词的形式出现的那像这个问题需要怎么解决呢？",
+    "char_count": 73,
+    "prompt": "translate",
+    "doubao_output": "I think Japanese and Korean can be removed. However, my use cases very often include both Chinese and English. Even though English mostly appears in the form of individual words in this context, how can this issue be solved?",
+    "doubao_time": 0.914,
+    "qwen_output": "I think Japanese and Korean can be excluded. However, in my usage scenarios, Chinese and English are often involved. Although English is usually presented as individual words, how can this problem be solved?",
+    "qwen_time": 0.707
+  },
+  {
+    "index": 47,
+    "raw_text": "太牛逼了，我今天试了一下阿里的开源模型，这个速度比云端的要快很多啊。",
+    "char_count": 34,
+    "prompt": "polish",
+    "doubao_output": "太厉害了，我今天试了一下阿里的开源模型，它的运行速度比云端模型快很多。",
+    "doubao_time": 0.885,
+    "qwen_output": "今天我试用了阿里的开源模型，发现其运行速度比云端版本快很多。",
+    "qwen_time": 0.461
+  },
+  {
+    "index": 47,
+    "raw_text": "太牛逼了，我今天试了一下阿里的开源模型，这个速度比云端的要快很多啊。",
+    "char_count": 34,
+    "prompt": "translate",
+    "doubao_output": "That's amazing! I tested Alibaba's open-source model today, and it's way faster than the cloud-based ones.",
+    "doubao_time": 1.37,
+    "qwen_output": "That's really impressive. I tried Ali's open-source model today, and it's much faster than the cloud-based one.",
+    "qwen_time": 0.555
+  },
+  {
+    "index": 48,
+    "raw_text": "总体还可以，但是会出现韩文，让人感觉很诡异。",
+    "char_count": 22,
+    "prompt": "polish",
+    "doubao_output": "整体体验还可以，但使用过程中会出现韩文，让人感觉很奇怪。",
+    "doubao_time": 1.151,
+    "qwen_output": "总体情况尚可，但会出现韩文，给人带来不适感。",
+    "qwen_time": 0.423
+  },
+  {
+    "index": 48,
+    "raw_text": "总体还可以，但是会出现韩文，让人感觉很诡异。",
+    "char_count": 22,
+    "prompt": "translate",
+    "doubao_output": "Overall it's okay, but Korean text randomly pops up sometimes, which feels really weird.",
+    "doubao_time": 0.956,
+    "qwen_output": "Overall it's still okay, but there will be Korean characters, which feels strange.",
+    "qwen_time": 0.438
+  },
+  {
+    "index": 49,
+    "raw_text": "那是不是现在就算已经修好了，我感觉好像还可以，你能做到什么地步呢？还有我们如何进一步提升一些中英混杂的词汇的准确性这个韩文又出现了。",
+    "char_count": 66,
+    "prompt": "polish",
+    "doubao_output": "那现在是不是就算已经修好了？我感觉目前状态还可以，你能做到什么程度呢？另外我们要如何进一步提升中英混杂词汇的识别准确性？刚刚这里又出现了韩文识别误差。",
+    "doubao_time": 1.84,
+    "qwen_output": "那是否现在已经修好？我感觉还行。你能做到什么程度呢？另外，关于如何进一步提高中英混杂词汇的准确性，韩文又出现了这个问题。",
+    "qwen_time": 0.704
+  },
+  {
+    "index": 49,
+    "raw_text": "那是不是现在就算已经修好了，我感觉好像还可以，你能做到什么地步呢？还有我们如何进一步提升一些中英混杂的词汇的准确性这个韩文又出现了。",
+    "char_count": 66,
+    "prompt": "translate",
+    "doubao_output": "So does that mean it's already fixed now? It seems okay to me. To what extent can you handle this? Also, how can we further improve the accuracy of Chinese-English mixed vocabulary? Here comes Korean again.",
+    "doubao_time": 1.2,
+    "qwen_output": "Is it already fixed now? I feel it's still okay. How far can you go? Also, we need to improve the accuracy of some mixed English-Chinese vocabulary, and Korean has come up again.",
+    "qwen_time": 0.746
+  }
+]

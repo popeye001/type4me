@@ -22,19 +22,28 @@ struct SonioxTranscriptUpdate: Sendable, Equatable {
     let partialText: String
 }
 
-enum SonioxServerEvent: Sendable, Equatable {
-    case transcript(SonioxTranscriptUpdate)
-    case finished
-    case error(code: Int, message: String)
+struct SonioxServerError: Sendable, Equatable {
+    let code: Int
+    let message: String
+}
+
+/// Combined result from a single Soniox server message.
+/// A message can carry tokens AND finished simultaneously.
+struct SonioxServerMessage: Sendable, Equatable {
+    let transcript: SonioxTranscriptUpdate?
+    let isFinished: Bool
+    let error: SonioxServerError?
 }
 
 enum SonioxProtocol {
 
     private static let endpoint = "wss://stt-rt.soniox.com/transcribe-websocket"
     private static let ignoredMarkerTokens: Set<String> = ["<end>", "<fin>"]
+    private static let maxEndpointDelayMs = 2000
 
-    static func buildWebSocketURL() throws -> URL {
-        guard let url = URL(string: endpoint) else {
+    static func buildWebSocketURL(override: String? = nil) throws -> URL {
+        let urlString = override ?? endpoint
+        guard let url = URL(string: urlString) else {
             throw SonioxProtocolError.invalidEndpoint
         }
         return url
@@ -44,14 +53,21 @@ enum SonioxProtocol {
         config: SonioxASRConfig,
         options: ASRRequestOptions
     ) throws -> String {
+        let isCloudProxy = options.cloudProxyURL != nil
         var payload: [String: Any] = [
-            "api_key": config.apiKey,
             "model": config.model,
             "audio_format": "pcm_s16le",
             "sample_rate": 16000,
             "num_channels": 1,
             "enable_endpoint_detection": true,
+            "max_endpoint_delay_ms": maxEndpointDelayMs,
+            "language_hints": ["zh", "en"],
+            "language_hints_strict": true,
         ]
+        // Only include api_key for direct connections, not cloud proxy
+        if !isCloudProxy {
+            payload["api_key"] = config.apiKey
+        }
 
         let terms = sanitizedTerms(from: options.hotwords)
         if !terms.isEmpty {
@@ -72,48 +88,43 @@ enum SonioxProtocol {
         Data()
     }
 
-    static func finalizeMessage(trailingSilenceMs: Int? = nil) -> String {
-        var payload: [String: Any] = ["type": "finalize"]
-        if let trailingSilenceMs {
-            payload["trailing_silence_ms"] = trailingSilenceMs
-        }
-
-        guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
-              let message = String(data: data, encoding: .utf8)
-        else {
-            return #"{"type":"finalize"}"#
-        }
-
-        return message
+    static func finalizeMessage() -> String {
+        #"{"type":"finalize"}"#
     }
 
-    static func parseServerEvent(from data: Data) throws -> SonioxServerEvent? {
+    /// Parse a server message, returning all present information at once.
+    /// A single message can carry tokens AND `finished: true` simultaneously.
+    static func parseServerMessage(from data: Data) throws -> SonioxServerMessage {
         let decoder = JSONDecoder()
         let response = try decoder.decode(Response.self, from: data)
 
+        let serverError: SonioxServerError?
         if let code = response.errorCode {
-            return .error(
+            serverError = SonioxServerError(
                 code: code,
                 message: response.errorMessage ?? "Soniox request failed"
             )
+        } else {
+            serverError = nil
         }
 
         let finalText = visibleText(from: response.tokens ?? [], isFinal: true)
         let partialText = visibleText(from: response.tokens ?? [], isFinal: false)
+        let transcript: SonioxTranscriptUpdate?
         if !finalText.isEmpty || !partialText.isEmpty {
-            return .transcript(
-                SonioxTranscriptUpdate(
-                    finalizedText: finalText,
-                    partialText: partialText
-                )
+            transcript = SonioxTranscriptUpdate(
+                finalizedText: finalText,
+                partialText: partialText
             )
+        } else {
+            transcript = nil
         }
 
-        if response.finished == true {
-            return .finished
-        }
-
-        return nil
+        return SonioxServerMessage(
+            transcript: transcript,
+            isFinished: response.finished == true,
+            error: serverError
+        )
     }
 
     private static func sanitizedTerms(from hotwords: [String]) -> [String] {

@@ -1,5 +1,328 @@
 # Changelog
 
+## v1.9.9 — Soniox v5、录音启动稳定性与模型列表更新 (2026-07-03)
+
+### 改进与修复
+- **Soniox 升级到 v5**：实时识别默认使用 `stt-rt-v5`，批量兜底使用 `stt-async-v5`
+- **录音启动更稳**：缩短 Soniox endpoint delay，并丢弃延迟过久的非最终 partial，减少启动/收尾阶段转圈或旧文本回流
+- **快捷键兼容性**：修复 F1-F20 等功能键被 macOS 附带 Fn 标记后，录制、冲突检测和触发不一致的问题；普通按键的 Fn 组合仍保留
+- **模型列表更新**：刷新 OpenAI、Claude、Gemini、DeepSeek、Kimi、豆包、MiniMax、百炼、智谱等 LLM 下拉模型；同步更新 AssemblyAI、Deepgram、ElevenLabs、百炼、百度等 ASR 模型/参数选项
+- **思考模式参数修正**：Kimi K2.7 不再发送禁用思考参数，智谱 GLM 新模型改用 `thinking: disabled`
+
+## v1.9.8 — 提前润色请求节流与复用优化 (2026-06-19)
+
+### 改进
+- **提前润色更稳**：保留现有录音中 speculative LLM 机制，但对过短文本、小幅增量和并发中的重复请求做节流，减少无意义 LLM 请求
+- **LLM 结果复用更准确**：最终 ASR 与提前润色输入只有空白、标点或尾部标点差异时可复用已有 LLM 结果；真正新增/改写内容仍会重新请求
+- **测试覆盖**：新增 `TranscriptDiff` 与 `SpeculativeLLMThrottle` 单元测试，覆盖复用判断、请求节流、排队和重置行为
+
+## v1.9.7 — 凭证保存、快捷键冲突与录音动效修复 (2026-06-19)
+
+### Bug 修复
+- **凭证保存兼容性 (#193/#191/#146)**：兼容旧版 flat keys、provider-grouped JSON、Keychain secure fields，并自动补齐 provider 默认字段，修复升级后 ASR/LLM 凭证可能无法保存或测试/保存按钮不可用的问题
+- **快捷键前缀冲突 (#192)**：检测单修饰键与组合修饰键的前缀冲突，设置页显示警告并允许「仍要设置」；运行时只延迟较短冲突键，避免误触发导致浮窗不出现或录音丢失
+- **Fn 组合键 (#158)**：快捷键录制、显示和运行时匹配都保留 Fn/function 修饰键，支持 Fn+Space 等组合
+- **录音动效 (#185)**：录音浮窗正确跟随线条 / 粒子云 / 电平样式，并新增「关闭 / Off」选项；关闭后仍保留处理阶段状态反馈
+- **测试连接布局 (#142)**：失败时按钮显示紧凑重试状态，长错误信息显示在按钮下方，不再撑坏布局
+- **应用内更新 (#203)**：下载遇到系统 “too many open files” 时给出明确重启/手动安装建议，并清理旧下载会话，降低重试失败概率
+- **火山 ASR 错误提示 (#147)**：忽略 HTTP 探测产生的误导性 `cannot upgrade to websocket` 报错，避免把探测错误展示成真实连接失败
+
+## v1.9.6 — 麦克风优先级 + 语音识别设置改进 (2026-06-15)
+
+### 新功能
+- **麦克风输入优先级**：语音识别设置可指定多个输入设备，Type4Me 会按顺序选择当前可用设备；蓝牙麦克风断开时自动回退到下一个设备，最后跟随系统默认
+- **中英文空格设置**：语音识别设置新增「中英文空格」开关，可按需保留或去除中文与英文/数字之间的空格
+
+### 改进与修复
+- 修复应用内安装失败后可能回滚到旧版本、或重新打开 `Type4Me-backup` 的问题
+- 本地版大包更新增强：放宽下载超时、自动断点重试，并补强进度条显示兜底
+- 保留中英文和数字之间的合理空格，同时继续清理 CJK 内部拼接产生的多余空格 (#186)
+- 修复 LLM 默认模型下保存/测试凭据按钮不可用的问题
+- LLM 请求复用客户端和 URLSession，减少重复初始化开销
+- 麦克风优先级弹窗优化为更紧凑的单列表布局，并扩大整行选择和右侧排序/增删按钮热区
+
+## v1.9.5 — 更新串包与长闲置重连修复 (2026-06-02)
+
+### Bug 修复
+- **本地版应用内更新串包 (#184)**：Local 版现在会下载 `local-apple-silicon` DMG，不再误装成云端版导致 Qwen3-ASR / SenseVoice 本地识别不可用
+- **火山 ASR 长时间不用后重连失败 (#181)**：WebSocket 首次发送失败时会用全新 URLSession 重试一次，并忽略 HTTP 探测产生的误导性 `cannot upgrade to websocket` 报错
+- **耳机/媒体键触发打开 Apple Music (#180)**：注册活跃媒体会话拦截 transport media keys，避免 macOS 自动唤起 Apple Music
+- **Qwen3 热词泄漏**：降低 Qwen3-ASR 把热词列表或 `Vocabulary` 前缀当成正文输出的概率，并在客户端做保守清理/回退
+- 设置页快捷键录制弹窗的触发样式按钮扩大点击区域，整行按钮都可点击
+
+## v1.9.4 — Mac Action + LLM 设置增强 + Local 稳定性 (2026-06-01)
+
+### 新功能
+- **Mac Action 模式**：用语音执行 macOS 操作，支持窗口管理、提醒事项、滚动、网页搜索、音量/亮度调整等常见动作
+- **LLM 设置增强**：新增自定义 OpenAI 兼容服务商，支持从 `/v1/models` 自动发现模型；思考模式改为跟随服务商能力显示，可在支持的服务商上关闭思考输出
+- **ASR 用量详情**：历史记录的「累计时长」新增详情面板，可按模型/引擎查看近 1 天、7 天、30 天本机识别时长
+- **耳机/媒体键快捷键**：支持用耳机或键盘媒体键触发录音
+
+### 改进与修复
+- **Local 版本稳定性提升**：修复 SenseVoice + Qwen3 长时间使用时的内存增长、Qwen3 服务重启竞态，以及 MLX 0.31+ 兼容问题
+- **Local 版本开箱即用加固**：Qwen3-ASR 继续使用 Python 3.12 + MLX 源码 JIT 构建，避免旧系统上的 metallib 兼容问题
+- **ElevenLabs 体验改进**：启用更干净的转写结果，并自动限制 keyterm 数量和长度，避免请求失败
+- 移除未采用的视觉、词汇和侧边打包实验改动，保留稳定功能进入正式版本
+
+## v1.9.3 — 历史性能修复 + 代办模式 (2026-04-26)
+
+### 新功能
+- **代办模式 / Handle It**：直接交付型 AI 助手，把语音口述当成需求指令而非待润色文本。覆盖邮件、即时消息、代码、翻译等多种场景，强制只输出最终成品（无引导语、无反问、信息不全用 `[占位符]` 标出）
+
+### Bug 修复
+- **历史记录卡顿、白屏、内存持续上涨 (#144)**：bjzhush 反馈在历史记录里翻动 1 分钟内内存达 1+ GB。三层叠加根因：
+  - `LazyVStack` 嵌套普通 `VStack/ForEach`，某天的所有 record cards 一次性 instantiated（不是真 lazy）
+  - `groupedRecords` / `filtered` 是 computed property，每次 body 求值都重新 filter + group + sort
+  - `ProgressView` 用 `.id("load-more-\(records.count)")` + `onAppear`，加载完触发 view 重建再次触发 onAppear，可能死循环加载到底
+- **浮窗 hover 状态泄漏**：NSTrackingArea 在 panel hidden 时挂起事件不触发 mouseExited，`isHovered` 跨录音 session 保留，导致下次开始录音误弹悬浮预览
+
+### 工程改进
+- 订阅功能（official variant）归档：`Type4Me/CloudSubscription/marker` 永久重命名，默认构建走 pure 路径，public GitHub Release 只发 pure + local 两个变体
+
+## v1.9.2 — 授权引导重做 + 历史日期筛选 (2026-04-17)
+
+### 新功能
+- 全新授权引导：首次启动或权限丢失时弹出统一的授权窗口，参考 Codex Computer Use 的拖拽式交互 — 点「授权」后浮窗跟随系统设置窗口展示，从浮窗里把 Type4Me 图标直接拖到列表即可完成辅助功能授权。拖入成功后自动返回主引导窗，两项权限都完成后一键「启动 Type4Me」
+- 历史记录日期筛选：新增日期筛选菜单，支持今日/昨日/本周/本月预设，也支持自定义范围
+
+### Bug 修复
+- 修复从 1.8.x 升级到 1.9.x 后辅助功能授权「显示已开启但实际失效」的问题 (#135) — 根因是 1.9.0 切到 Developer ID 签名后，macOS TCC 按签名身份绑定授权，旧版自签条目对新签名无效。新的引导窗会主动识别并指导重新授权
+- 历史记录搜索栏右侧按钮字号/基线对齐问题：统一到 12pt + 固定 30pt 高度
+
+### 改进
+- 麦克风在 `.denied` 状态下跳转系统设置并保持状态同步（guide 窗 1s 轮询，不再需要手动重启 app 才能看到状态更新）
+- 浮窗以 60fps 跟随系统设置窗口位置，拖动窗口时浮窗紧贴不漂移
+
+## v1.9.1 — 悬浮预览 + 应用级片段 + ASR 连接池 (2026-04-13)
+
+### 新功能
+- 悬浮文本预览：鼠标悬停录音条时弹出完整转录文本（设置可关）
+- 应用级片段替换：针对不同 App 设置不同的替换规则，Chrome 风格 Tab 切换
+- Prompt 优化器 v2：任务分类、智能框架扩展、结构化输出规则
+- 正式写作 Prompt 升级：单要点内容不再强制编号，新增示例，旧版自动迁移
+- Qwen3-ASR 服务崩溃自动重启（最多 3 次）
+- 模型内嵌部署：SenseVoice/VAD 模型随 app 打包，首次启动自动部署
+
+### 性能优化
+- ASR 连接预热：启动时预建 TCP+TLS 连接，首次录音延迟降低 150-300ms
+- 共享 URLSession 连接池：所有 ASR 客户端复用连接，减少 TCP 握手开销
+- 火山 ASR 丢弃 partial 检测（LCP 算法），本地保留 partial 防闪烁
+- SenseVoice 代际过滤 + VAD 残余样本处理，提升识别稳定性
+- Cloud 配额非阻塞检查，录音启动不再等待网络
+
+### 改进
+- 设置页重组：录音行为拆分为"录音"和"语音识别"两张卡片
+- 模式设置支持滚动，保存按钮移到顶部，显示模板变量提示
+- 快速纠错后自动导航到词汇表 Tab
+- 反馈音统一满音量，移除 Speaker Keep-Alive 功能
+- Fn 键可用作快捷键修饰键
+- 选中文本读取超时增加到 500ms，减少误判
+
+### Bug 修复
+- 剪贴板恢复时序修复（50ms→300ms），改善 VS Code/Slack/飞书等 Electron 应用兼容性
+- Claude LLM 错误处理：检测 SSE error 和 stop_reason: "error"，60s 超时保护
+- SQL 注入防护：HistoryStore 改用参数化查询
+- 系统音量崩溃恢复：启动/退出时自动还原因崩溃未恢复的音量
+- 录音状态管理：区分 preparing/recording 阶段，session idle 等待防止状态污染
+- 浮窗动画竞态修复：generation counter 防止 hide/show 冲突
+
+## v1.9.0 — Developer ID 签名 + 蓝牙支持 + 注入改进 (2026-04-11)
+
+### 重要变更: Apple Developer ID 签名
+本版本起使用 Apple Developer ID 签名并通过 Apple 公证 (Notarization)。安装不再提示"已损坏"或需要手动信任。
+
+**升级用户请注意**: 由于签名身份变更，首次启动需要重新授予辅助功能和麦克风权限，以及确认钥匙串访问（输入 Mac 登录密码放行即可）。
+
+### 新功能
+- 蓝牙音频支持：提示音在 BT 音箱/耳机上完整播放，不再丢失前几百毫秒
+- 音箱保活 & 麦克风保活开关，防止 BT 设备休眠断开
+- 麦克风 & 提示音输出设备选择，可指定录音和播放设备
+- 鼠标中键/侧键可用作录音快捷键
+- 文本注入兼容性改进：支持 Electron (VS Code)、微信、飞书等更多应用
+- 剪贴板行为改进：录音不再意外覆盖原有剪贴板内容
+- 新增提示音风格：拨弦、沉浸、乒
+- 双语 README (中文 + English)
+
+### 改进
+- ASR 停止流程优化：录完到出结果延迟显著降低
+- 超短音频 (<0.3s) 自动跳过，减少噪声幻觉
+- 浮窗进度条改为两阶段动画，体验更流畅
+- 移除订阅/Cloud 代理功能，开源版更轻量
+
+## v1.8.1 — ElevenLabs 修复 + 百炼国际版支持 (2026-04-07)
+
+### Bug 修复
+- 修复 ElevenLabs 录音结束后最长延迟 5 秒才注入文字的问题 (#105)
+- 修复 ElevenLabs 流式识别累积模式下文字重复的问题 (#105)
+
+### 新功能
+- 百炼 ASR 新增 Base URL 配置项，支持国际版端点 (#106)
+
+## v1.8.0 — 语音润色升级 + Qwen3 校准 + 断句优化 (2026-04-06)
+
+### 语音润色
+- Prompt 全面升级：支持自我修正识别（"不对，应该是..."自动处理）、口语数字转阿拉伯数字、多要点自动分点结构化、语境感知（正式/非正式内容区别处理）
+- 语音润色升级为内置模式，模式详情页支持「还原为官方版」一键恢复
+- 新增短文本跳过润色选项（10-50 字阈值可选），短句直接用 ASR 结果
+
+### 语音识别
+- SenseVoice 录音结束后自动调用 Qwen3 HTTP API 做二次校准，提升最终识别准确率
+- 火山引擎断句参数优化：end_window_size 1.5s→3s，force_to_speech_time 关闭，减少思考停顿被截断
+- Soniox 端点检测延迟 3s→10s，适应更长停顿
+- ASR 标点始终开启，不再因有 LLM ���关闭
+- CJK 字符间多余空格自动清除（ASR 分段拼接产生的空格）
+
+### 交互改进
+- 新增去句末标点选项（关闭/仅句号/全部标点）
+- ESC 打断改进：`onESCAbort` 返回处理状态，无活跃录音时 ESC 穿透到系统
+- ESC 打断始终启用，移除用户设置开关
+
+### 音频反馈
+- 开始音改用 cachedPlayer，新增静音预热（primeAudioOutput），首次提示音不再丢失开头
+- 停止音按样式独立处理（chime/水滴1/水滴2/键盘/关闭）
+
+### 设置 UI
+- 本地模型区域重设计为双栏卡片：SenseVoice（始终运行）+ Qwen3-ASR（可控启停）
+- 模式编辑表单样式统一，Prompt 编辑器自动高度
+- 历史记录新增「纠错」按钮，快速打开纠错弹窗
+- 切��� ASR 引擎时自动释放 SenseVoice 缓存模型
+
+## v1.7.0 — 社区 PR 合并 + Keychain 迁移 + 注入性能优化 (2026-04-04)
+
+### 社区贡献
+- 历史记录显示 ASR 引擎名称 (#99, @jovezhong)
+- Deepgram 数字转换开关 (#100, @jovezhong)
+- ElevenLabs Scribe v2 流式识别引擎 (#101, @jovezhong)
+- API Key 迁移到 macOS Keychain + 日志脱敏 (#102, @jasonwong2001)
+- 空录音不保存历史 + 按钮点击区域优化 (#103, @ShaneLevs)
+
+### 词汇管理
+- 内置热词/片段脱钩，改为纯用户管理
+- 热词和片段替换支持批量编辑（Sheet 弹窗，每行一条）
+- 批量编辑按钮移到标题行，与排序按钮并排
+- Soniox 二次校准死代码清理
+
+### 性能优化
+- 文本注入后立即通知 UI，剪贴板恢复延迟执行，减少粘贴→完成的感知延迟
+- 快捷键停止和 ESC 中断改用 MainActor.assumeIsolated，减少调度延迟
+- 防止旧 session 的 stale finalized 覆盖新录音
+
+### 构建
+- DMG 构建自动检测 variant/sherpa 状态变化，清理过期缓存
+- 签名跳过优化：同 identity + 有效签名时不重签
+
+## v1.6.2 — Soniox 重构 + 异步校准 + 并发安全 (2026-04-01)
+
+- Soniox 客户端重构：去掉 ConnectionGate/Delegate，简化为直连 WebSocket
+- Soniox 异步校准：录音结束后并行启动完整音频转录，自动替换更准确的结果
+- Soniox 协议优化：start message 加 language_hints (zh/en)、max_endpoint_delay_ms
+- Soniox 配置简化：移除 model 选择字段，默认使用最新模型
+- SonioxAsyncClient：新增文件级异步转录（上传 → 轮询 → 获取结果）
+- 火山引擎热词逻辑优化：有云端词表 (boosting_table_id) 时跳过 inline hotwords，避免冲突
+- 并发安全修复：KeychainService 凭证缓存、SnippetStorage/HotwordStorage 文件缓存加锁
+- SystemVolumeManager：CoreAudio 操作移到专用后台队列，避免蓝牙设备卡主线程
+- SenseVoiceServerManager：currentQwen3Port 改用 OSAllocatedUnfairLock
+- PromptContext.capture() 改为 async，AX 读取用 detached task + timeout 防死锁
+- DebugFileLogger：ISO8601DateFormatter 复用，避免重复创建
+- HotwordStorage：新增 builtinVersion 版本号 + loadCloudCompatible() 过滤方法
+
+## v1.6.1 — 流式识别韧性 + 代理绕过 + 词库优化 (2026-03-31)
+
+- 流式识别韧性大幅增强：按停止立即响应、不再重复粘贴、超时自动恢复
+- 连接中途断开时自动用完整录音重新识别（batch fallback）
+- 中断/失败的识别也保存到历史记录
+- 新增「绕过系统代理」选项（关闭/仅 ASR/全部）
+- Deepgram 热词受 URL 长度限制，自动截取前 30 个并在设置页提示
+- 词库管理界面优化：替换映射按组显示、热词和替换映射支持排序
+- ASR 设置：新 provider 自动填充默认值、凭证校验优化
+- 自动更新修复：不再对已签名 DMG 重复签名（修复 Gatekeeper「已损坏」错误）
+- AssemblyAI 多语言模型支持
+- 6 个 ASR 客户端发送计数修正，避免误判连接状态
+
+## v1.6.0 — 应用内更新 + Apple Speech + Bug 修复 (2026-03-30)
+
+- 应用内更新：设置页 About 标签直接下载新版本并自动安装重启，Local 版更新时自动保留本地 ASR 模型
+- 新增 Apple Speech 识别引擎：macOS 原生语音识别，无需 API Key，支持多语言
+- 修复长录音（40-70s+）按快捷键停止时文字丢失：toggle 状态反转导致 onStart 触发 forceReset，现在安全重定向到 stop
+- 火山引擎模型选项简化命名（"流式语音识别模型 2.0" → "模型 2.0（推荐，更便宜）"）
+- ASR 服务启动时显示「启动中」状态提示
+- 片段替换引擎优化，移除冗余映射词条和编译缓存
+- CLAUDE.md 更新为 SenseVoice + Qwen3-ASR 双引擎架构描述
+
+## v1.5.1 — Bug 修复 + 稳定性改进 (2026-03-30)
+
+- 修复片段替换链式叠加 bug：正则缺少 word boundary，导致前一条替换的产物被后续规则二次匹配（如 "Cloud Code" → "Claudee Code"）
+- 快捷键 event tap 健康检查：每 10 秒检测 tap 是否存活，静默失效时自动重建
+- 辅助功能权限重试改进：5 次重试失败后弹窗提示重启 App，附带一键重启
+- 新增 `type4me://reload-vocabulary` URL scheme，支持外部工具（如 Claude Code skill）触发热词/片段词表刷新
+- 签名优化：首次构建自动创建持久化自签名证书 "Type4Me Local"，避免 ad-hoc 签名每次重编译后辅助功能权限失效
+- 构建时自动移除 quarantine flag，防止 Accessibility 权限静默失效
+- 设置向导增加辅助功能权限提示文案
+
+## v1.5.0 — Dual-ASR + 三版本发布 (2026-03-30)
+
+### 🎯 Dual-ASR 架构
+
+全新双模型并行识别架构，大幅提升转写准确率：
+
+- **SenseVoice** 负责流式实时识别，说话时即时出字
+- **Qwen3-ASR** 负责精准校验，停顿时增量投机转录，松手后全量 final 校正
+- 设置页新增两个模型独立启停按钮 + 状态显示
+- 支持 Qwen3-only 模式（悬浮窗显示"录音中"）
+
+### 📦 两种 DMG 版本
+
+| 版本 | 包含内容 |
+|------|---------|
+| Cloud | 纯云端识别，最小体积 (~23MB) |
+| Local | SenseVoice + Qwen3-ASR 双模型本地识别，开箱即用 (~1.2GB) |
+
+### 🗂 存储架构升级
+
+- 热词从 UserDefaults 迁移到双 JSON 文件 (builtin-hotwords.json + hotwords.json)
+- 片段替换同步迁移 (builtin-snippets.json + snippets.json)
+- 139 个内置默认热词
+- 词汇表 UI 全新设计：内置词数统计、Finder 一键打开编辑、刷新按钮
+
+### 🔧 LLM 管理
+
+- 设置页新增 LLM 启停按钮
+- `/llm/unload` 端点释放内存，`/llm/load` 重新加载
+- LLM 与 ASR 共享 GPU 推理锁，避免并发 Metal 冲突
+
+### 🐛 Bug 修复
+
+- 进程泄漏：PID 文件管理替代 pgrep 误杀
+- App 退出：同步 killAllServerProcesses 替代 fire-and-forget Task
+- PyTorch detach()：3 处 `.numpy()` 前补 `.detach()`
+- PyInstaller email-validator 依赖补全
+- 配置持久化：`UserDefaults.bool` → `object(forKey:) as? Bool ?? true`
+- onChange 初始化误触发防护
+- SenseVoice 端口检测：`isRunning` → `currentPort != nil`
+
+---
+
+## v1.3.7 — 保留剪贴板 + Dock 图标 (2026-03-29)
+
+### ✨ 新功能
+
+- 新增「保留剪贴板」设置（偏好设置 → 通用 → 第二行）(#57)
+  - 开启：使用键盘模拟输入，完全不碰剪贴板
+  - 关闭（默认）：注入成功后自动恢复原始剪贴板，失败时保留识别文本作为 fallback
+- 启动时显示 Dock 图标，关闭所有窗口后自动隐藏到菜单栏
+
+### 🔧 改进
+
+- 注入成功检测：非编辑角色从 4 个扩展到 27 个，减少误判
+- 区分"无聚焦元素"（桌面）和"Electron nil role"（编辑区），避免桌面语音输入时文本丢失
+- 剪贴板深拷贝支持所有类型（图片、文件、富文本），不只是纯文本
+
+### 🐛 Bug 修复
+
+- 修复剪贴板恢复时 changeCount 校验使用写入前的值导致恢复静默失败
+
+---
+
 ## v1.3.5 — 修复菜单栏图标不显示 (2026-03-28)
 
 ### 🐛 Bug 修复

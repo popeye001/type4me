@@ -3,7 +3,7 @@ import Foundation
 struct SherpaASRConfig: ASRProviderConfig, Sendable {
 
     static let provider = ASRProvider.sherpa
-    static var displayName: String { L("本地识别 (Paraformer)", "Local (Paraformer)") }
+    static var displayName: String { L("本地识别 (SenseVoice)", "Local (SenseVoice)") }
 
     static var credentialFields: [CredentialField] { [] }
 
@@ -45,4 +45,19 @@ struct SherpaASRConfig: ASRProviderConfig, Sendable {
             ModelManager.AuxModelType.punctuation.directoryName
         )
     }
+
+    /// Path to the SenseVoice model directory.
+    var senseVoiceModelDir: String {
+        (modelDir as NSString).appendingPathComponent(
+            ModelManager.StreamingModel.senseVoiceSmall.directoryName
+        )
+    }
+
+    /// Path to the Silero VAD model directory.
+    var vadModelDir: String {
+        (modelDir as NSString).appendingPathComponent(
+            ModelManager.AuxModelType.sileroVad.directoryName
+        )
+    }
+
 }

@@ -30,7 +30,14 @@ enum BailianServerEvent: Sendable, Equatable {
 
 enum BailianProtocol {
 
-    static let endpoint = URL(string: "wss://dashscope.aliyuncs.com/api-ws/v1/inference")!
+    static let defaultEndpoint = URL(string: "wss://dashscope.aliyuncs.com/api-ws/v1/inference")!
+
+    static func endpoint(for config: BailianASRConfig) -> URL {
+        if !config.baseURL.isEmpty, let url = URL(string: config.baseURL) {
+            return url
+        }
+        return defaultEndpoint
+    }
 
     static func buildRunTaskMessage(
         config: BailianASRConfig,

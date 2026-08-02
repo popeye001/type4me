@@ -5,11 +5,11 @@ struct VolcanoASRConfig: ASRProviderConfig, Sendable {
     static let provider = ASRProvider.volcano
     static var displayName: String { L("火山引擎 (Doubao)", "Volcano (Doubao)") }
 
-    /// Seed ASR 2.0 - same model, 4.5x cheaper, higher default concurrency
+    /// 豆包流式语音识别模型 2.0
     static let resourceIdSeedASR = "volc.seedasr.sauc.duration"
-    /// Legacy big-model resource ID
+    /// 豆包流式语音识别模型 1.0
     static let resourceIdBigASR = "volc.bigasr.sauc.duration"
-    /// Auto-detect: try seed first, fall back to bigasr
+    /// Auto: prefer 2.0, fall back to 1.0
     static let resourceIdAuto = "auto"
 
     static var credentialFields: [CredentialField] {[
@@ -23,9 +23,9 @@ struct VolcanoASRConfig: ASRProviderConfig, Sendable {
             isOptional: false,
             defaultValue: resourceIdAuto,
             options: [
-                FieldOption(value: resourceIdAuto, label: L("自动", "Auto")),
-                FieldOption(value: resourceIdSeedASR, label: L("模型 2.0（推荐，更便宜）", "Model 2.0 (recommended, cheaper)")),
-                FieldOption(value: resourceIdBigASR, label: L("大模型", "Large Model")),
+                FieldOption(value: resourceIdAuto, label: L("自动（优先 2.0，额度用完切 1.0）", "Auto (prefer 2.0, fallback to 1.0)")),
+                FieldOption(value: resourceIdSeedASR, label: L("流式语音识别模型 2.0", "Streaming ASR Model 2.0")),
+                FieldOption(value: resourceIdBigASR, label: L("流式语音识别大模型", "Streaming ASR Large Model")),
             ]
         ),
     ]}

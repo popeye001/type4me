@@ -52,6 +52,36 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(appState.barPhase, .processing)
     }
 
+    func testHiddenRecordingVisualDoesNotShowPanelUntilProcessing() {
+        let previousStyle = UserDefaults.standard.string(forKey: RecordingVisualStyle.storageKey)
+        UserDefaults.standard.set(RecordingVisualStyle.hidden.rawValue, forKey: RecordingVisualStyle.storageKey)
+        defer {
+            if let previousStyle {
+                UserDefaults.standard.set(previousStyle, forKey: RecordingVisualStyle.storageKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: RecordingVisualStyle.storageKey)
+            }
+        }
+
+        let appState = AppState()
+        var showCount = 0
+        var hideCount = 0
+        appState.onShowPanel = { showCount += 1 }
+        appState.onHidePanel = { hideCount += 1 }
+
+        appState.startRecording()
+        appState.markRecordingReady()
+
+        XCTAssertEqual(appState.barPhase, .recording)
+        XCTAssertEqual(showCount, 0)
+        XCTAssertEqual(hideCount, 1)
+
+        appState.stopRecording()
+
+        XCTAssertEqual(appState.barPhase, .processing)
+        XCTAssertEqual(showCount, 1)
+    }
+
     func testSetLiveTranscriptReplacesExistingConfirmedSegments() {
         let appState = AppState()
         appState.setLiveTranscript(
@@ -91,13 +121,38 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(appState.segments.first?.isConfirmed == true)
     }
 
+    func testSetLiveTranscriptDropsStalePartialUpdates() {
+        let appState = AppState()
+        appState.setLiveTranscript(
+            RecognitionTranscript(
+                confirmedSegments: ["new"],
+                partialText: "",
+                authoritativeText: "new",
+                isFinal: false
+            )
+        )
+
+        appState.setLiveTranscript(
+            RecognitionTranscript(
+                confirmedSegments: ["old"],
+                partialText: "",
+                authoritativeText: "old",
+                isFinal: false,
+                emitTime: ContinuousClock.now - .seconds(1)
+            )
+        )
+
+        XCTAssertEqual(appState.transcriptionText, "new")
+    }
+
     func testFinalizeShowsClipboardFallbackMessage() {
         let appState = AppState()
+        appState.barPhase = .processing
 
         appState.finalize(text: "测试文本", outcome: .copiedToClipboard)
 
         XCTAssertEqual(appState.barPhase, .done)
-        XCTAssertEqual(appState.feedbackMessage, "已粘贴到剪贴板")
+        XCTAssertEqual(appState.feedbackMessage, InjectionOutcome.copiedToClipboard.completionMessage)
         XCTAssertEqual(appState.transcriptionText, "测试文本")
     }
 

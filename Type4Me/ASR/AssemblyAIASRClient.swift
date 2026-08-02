@@ -86,7 +86,7 @@ actor AssemblyAIASRClient: SpeechRecognizer {
         let gate = AssemblyAIConnectionGate()
         let closeTracker = AssemblyAICloseTracker()
         let delegate = AssemblyAIWebSocketDelegate(connectionGate: gate, closeTracker: closeTracker)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let session = URLSession(configuration: options.urlSessionConfiguration, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: request)
         task.resume()
 
@@ -104,12 +104,17 @@ actor AssemblyAIASRClient: SpeechRecognizer {
 
         try await gate.waitUntilReady(timeout: .seconds(5))
         logger.info("AssemblyAI WebSocket connected: \(url.absoluteString, privacy: .private(mask: .hash))")
+
+        // Send keyterms via UpdateConfiguration after connection to avoid URL length limits
+        if let keytermsMsg = AssemblyAIProtocol.updateConfigurationMessage(hotwords: options.hotwords) {
+            try? await task.send(.string(keytermsMsg))
+        }
     }
 
     func sendAudio(_ data: Data) async throws {
         guard let task = webSocketTask else { return }
-        audioPacketCount += 1
         try await task.send(.data(data))
+        audioPacketCount += 1
     }
 
     func endAudio() async throws {

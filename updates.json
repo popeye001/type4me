@@ -1,6 +1,150 @@
 {
-  "latest": "1.3.6",
+  "latest": "1.9.9",
   "releases": [
+    {
+      "version": "1.9.9",
+      "date": "2026-07-03",
+      "notes": "- Soniox 默认升级到 stt-rt-v5，批量兜底升级到 stt-async-v5\n- 缩短 Soniox endpoint delay，并丢弃过期 partial，减少录音启动/收尾阶段转圈或旧文本回流\n- 修复 F1-F20 功能键被 macOS 附带 Fn 标记后，录制、冲突检测和触发不一致的问题\n- 刷新主流 LLM/ASR 厂商的模型列表，并修正 Kimi K2.7、智谱 GLM 新模型的思考模式参数",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.9/Type4Me-v1.9.9-cloud.dmg",
+      "cloud_dmg_size": 5919536,
+      "cloud_dmg_sha256": "fa40a0e26025f74a6b6fdf1fe61297458098f537128c8ea5a3516b98d53e4f0b",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.9/Type4Me-v1.9.9-local-apple-silicon.dmg",
+      "local_dmg_size": 713919031,
+      "local_dmg_sha256": "0814fbbc56d193e2f8790daf81e0247c755c69c8e7a494b47267b7582775a14b"
+    },
+    {
+      "version": "1.9.8",
+      "date": "2026-06-19",
+      "notes": "- 减少录音中提前润色的无意义 LLM 请求：过短文本、小幅增量和并发中的重复请求会被节流\n- 最终 ASR 与提前润色输入只有空白、标点或尾部标点差异时，可复用已有 LLM 结果\n- 新增提前润色复用判断与请求节流的单元测试",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.8/Type4Me-v1.9.8-cloud.dmg",
+      "cloud_dmg_size": 5912474,
+      "cloud_dmg_sha256": "810fa4d98558f7bbdd953aa53c3dcba121cbe5f2fb08b77638a8c8453a7cef7f",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.8/Type4Me-v1.9.8-local-apple-silicon.dmg",
+      "local_dmg_size": 714230064,
+      "local_dmg_sha256": "e811e4a4cc5b0375fc0e6994efdf4a37ad87b2628fe0390c27a139cc51dfb5c7"
+    },
+    {
+      "version": "1.9.7",
+      "date": "2026-06-19",
+      "notes": "- 修复旧版本升级后 ASR/LLM 凭证可能无法保存、测试/保存按钮不可用的问题\n- 修复测试连接失败时，长错误信息不再撑坏按钮布局\n- 修复单修饰键快捷键与组合修饰键冲突时，较短快捷键提前触发导致录音浮窗不出现或录音内容丢失的问题\n- 修复快捷键录制时无法保留 Fn 组合键的问题，支持 Fn+Space 等组合\n- 修复录音动效设置不生效的问题，并新增「关闭」录音动效选项\n- 改进应用内更新下载失败提示；遇到系统 “too many open files” 时给出明确重启/手动安装建议\n- 忽略火山 ASR HTTP 探测产生的误导性 WebSocket upgrade 报错",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.7/Type4Me-v1.9.7-cloud.dmg",
+      "cloud_dmg_size": 5888374,
+      "cloud_dmg_sha256": "2299f2307bd1e0e3cd44f8da98b9464a6258b7869b2917362988e65e471c905a",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.7/Type4Me-v1.9.7-local-apple-silicon.dmg",
+      "local_dmg_size": 714222873,
+      "local_dmg_sha256": "7317e8704a6c569260ad544990a34f64da419f8b464b1ce6675d03f73d5ca57f"
+    },
+    {
+      "version": "1.9.6",
+      "date": "2026-06-15",
+      "notes": "- 修复应用内安装失败后可能回滚到旧版本、或重新打开 Type4Me-backup 的问题\n- 本地版大包更新增强：放宽下载超时、自动断点重试，并补强进度条显示兜底\n- 语音识别设置新增麦克风输入优先级：可指定多个输入设备，蓝牙等设备不可用时自动回退到下一个设备，最后跟随系统默认\n- 语音识别设置新增「中英文空格」开关，可按需保留或去除中文与英文/数字之间的空格\n- 保留中英文和数字之间的合理空格，同时继续清理 CJK 内部拼接产生的多余空格 (#186)\n- 修复 LLM 默认模型下保存/测试凭据按钮不可用的问题\n- LLM 请求复用客户端和 URLSession，减少重复初始化开销",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.6/Type4Me-v1.9.6-cloud.dmg",
+      "cloud_dmg_size": 5829388,
+      "cloud_dmg_sha256": "f220362622130bf6b56db86de459e696b9eeb2ba25ff721f9fd79063c2cc51f4",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.6/Type4Me-v1.9.6-local-apple-silicon.dmg",
+      "local_dmg_size": 714809255,
+      "local_dmg_sha256": "f827676278270819899b74c0621ca3b1c2b5890ec60e6ee5d337998d53130e5b"
+    },
+    {
+      "version": "1.9.5",
+      "date": "2026-06-02",
+      "notes": "- 修复本地版应用内更新误下载云端版 DMG，导致升级后 Qwen3-ASR / SenseVoice 本地识别不可用的问题 (#184)\n- 修复火山 ASR 长时间不用后重连时可能显示误导性 WebSocket upgrade 报错的问题 (#181)\n- 修复耳机/媒体键作为快捷键时可能自动打开 Apple Music 的问题 (#180)\n- Local 版本降低 Qwen3-ASR 把热词列表当成正文输出的概率，并做保守清理/回退\n- 设置页快捷键录制弹窗扩大触发样式按钮点击区域",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.5/Type4Me-v1.9.5-cloud.dmg",
+      "cloud_dmg_size": 5643588,
+      "cloud_dmg_sha256": "2cac23982de6c5358e6d00e5bc7e5e3942c22b2e2593bc558366bc6222e26a32",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.5/Type4Me-v1.9.5-local-apple-silicon.dmg",
+      "local_dmg_size": 714099386,
+      "local_dmg_sha256": "a98c0f1bdeef9f141525dda1440eabbce5facf79933edeb8b0bef990f0ea3b15"
+    },
+    {
+      "version": "1.9.4",
+      "date": "2026-06-01",
+      "notes": "- 新增 Mac Action 模式：用语音执行窗口管理、提醒事项、滚动等 macOS 操作\n- LLM 设置增强：支持自定义 OpenAI 兼容服务、从 /v1/models 自动发现模型，并可按服务商控制思考模式\n- 历史记录新增本机 ASR 用量详情：按模型/引擎查看近 1 天、7 天、30 天累计时长\n- 支持耳机/媒体键作为录音快捷键\n- ElevenLabs 转写更干净，并自动限制 keyterm 避免请求失败\n- Local 版本稳定性提升：修复 SenseVoice + Qwen3 长时间使用内存增长、服务重启和 MLX 兼容问题",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.4/Type4Me-v1.9.4-cloud.dmg",
+      "cloud_dmg_size": 5608976,
+      "cloud_dmg_sha256": "4f19d842ae7a2761572b549535fc4d77ae45e990848fabe55c004860ab1b7303",
+      "local_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.9.4/Type4Me-v1.9.4-local-apple-silicon.dmg",
+      "local_dmg_size": 714080818,
+      "local_dmg_sha256": "2a852ccfe96bc3b294e35a81cdf9e106efe6c920312597cfde57f73874b6ed79"
+    },
+    {
+      "version": "1.9.3",
+      "date": "2026-04-26",
+      "notes": "- 历史记录性能优化：修复滚动卡顿、白屏和内存持续上涨问题 (#144)\n- 新增「代办模式 / Handle It」：把语音口述当成需求指令，直接交付邮件、消息、代码等成品，禁止引导语和反问\n- 修复浮窗 hover 状态泄漏：录音结束后下次开始不再误弹悬浮文本预览"
+    },
+    {
+      "version": "1.9.2",
+      "date": "2026-04-17",
+      "notes": "- 全新授权引导：首次启动或权限丢失时弹出统一授权窗口，参考 Codex Computer Use 的拖拽式交互\n- 浮窗跟随系统设置窗口，从浮窗直接拖 Type4Me 图标到列表完成辅助功能授权\n- 拖入成功自动返回主引导窗，两项权限都给后一键「启动 Type4Me」进入设置\n- 修复从 1.8.x 升级后辅助功能授权「显示已开启但实际失效」问题 (#135)\n- 历史记录日期筛选：今日/昨日/本周/本月 + 自定义范围\n- 历史记录搜索栏右侧按钮字号和基线对齐统一\n- 麦克风 .denied 状态同步改进，改完开关无需重启 app\n- 浮窗 60fps 跟随系统设置窗口，拖动不漂移"
+    },
+    {
+      "version": "1.9.1",
+      "date": "2026-04-13",
+      "notes": "- 悬浮文本预览：鼠标悬停录音条查看完整转录文本\n- 应用级片段替换：针对不同 App 设置不同替换规则\n- ASR 连接预热和连接池，首次录音延迟降低 150-300ms\n- 火山 ASR 丢弃 partial 检测，防止文字闪烁\n- Qwen3-ASR 服务崩溃自动重启（最多 3 次）\n- Prompt 优化器 v2：任务分类 + 智能框架扩展\n- 正式写作 Prompt 升级，单要点内容不再强制编号\n- 设置页重组：录音行为拆分为两张卡片\n- Claude LLM 错误处理和 60s 超时保护\n- 剪贴板恢复时序修复，改善 Electron 应用兼容性\n- SQL 注入防护、系统音量崩溃恢复、Fn 键快捷键支持"
+    },
+    {
+      "version": "1.9.0",
+      "date": "2026-04-11",
+      "notes": "- 蓝牙音频支持：提示音完整播放、音箱/麦克风保活、设备选择\n- 鼠标中键/侧键可用作录音快捷键\n- 文本注入兼容性改进：Electron/微信/飞书等应用\n- 剪贴板行为修复：录音不再覆盖原有剪贴板内容\n- Developer ID 签名 + Apple 公证，安装不再提示\"损坏\"\n- ASR 停止延迟优化，录完到出结果更快\n- 新增多种提示音风格（拨弦/沉浸/乒）\n- 双语 README"
+    },
+    {
+      "version": "1.8.1",
+      "date": "2026-04-07",
+      "notes": "- 修复 ElevenLabs 录音结束后最长延迟 5 秒才注入文字的问题\n- 修复 ElevenLabs 流式识别累积模式下文字重复的问题\n- 百炼 ASR 新增 Base URL 配置项，支持国际版端点"
+    },
+    {
+      "version": "1.8.0",
+      "date": "2026-04-06",
+      "notes": "- 语音润色 Prompt 全面升级：支持自我修正识别、数字格式化、分点结构化、语境感知\n- 语音润色升级为内置模式，支持「还原为官方版」一键恢复\n- 新增短文本跳过润色选项（10-50 字可选）\n- SenseVoice 录音结束后 Qwen3 自动校准，提升最终识别准确率\n- ASR 断句更宽松，减少思考停顿被截断\n- 新增去句末标点选项（关闭/仅句号/全部标点）\n- ESC 打断改进：无活跃录音时穿透到系统，不再吞键\n- 提示音预热：首次录音提示音不再被截断\n- 停止音按样式分别处理\n- 本地模型设置 UI 重设计为双栏卡片\n- 历史记录新增快速纠错功能\n- CJK 字符间多余空格自动清除\n- 切换 ASR 引擎时自动释放缓存模型"
+    },
+    {
+      "version": "1.7.0",
+      "date": "2026-04-04",
+      "notes": "- 合并 5 个社区 PR (#99-#103)\n- 新增 ElevenLabs Scribe v2 流式识别引擎\n- API Key 迁移到 macOS Keychain，日志脱敏\n- 历史记录显示 ASR 引擎名称\n- Deepgram 数字转换开关\n- 空录音不再保存历史记录，按钮点击区域优化\n- 内置热词/片段脱钩，改为纯用户管理\n- 热词和片段替换支持批量编辑\n- 注入性能优化：粘贴后立即响应，减少 UI 延迟\n- 构建脚本优化：签名跳过、DMG 缓存自动清理"
+    },
+    {
+      "version": "1.6.3",
+      "date": "2026-04-03",
+      "notes": "- LLM 模型选择改为下拉预设 + 自定义输入，支持 10 个厂商常用模型\n- 删除 Local Qwen LLM provider，本地模型统一走 Ollama\n- 本地识别选项改名「SenseVoice 流式 + Qwen3 ASR 校准」，Cloud 版隐藏该选项\n- ASR/LLM 设置页密钥展示逻辑统一\n- SenseVoice 模型文件校验加固（检查存在 + 非零字节）\n- Qwen3-ASR 健康检查失败后主动终止进程"
+    },
+    {
+      "version": "1.6.2",
+      "date": "2026-04-01",
+      "notes": "- Soniox 客户端重构：去掉 ConnectionGate，简化连接流程\n- Soniox 异步校准：录音结束后用完整音频做二次校准，提升准确率\n- Soniox 协议优化：支持 language_hints (zh/en) + endpoint detection\n- 火山引擎热词逻辑优化：有云端词表时跳过 inline hotwords 避免冲突\n- 并发安全修复：KeychainService/SnippetStorage/HotwordStorage 加缓存，SystemVolumeManager 移到后台队列\n- PromptContext.capture() 改为 async 防 AX 死锁\n- 热词存储新增版本号和云端兼容过滤"
+    },
+    {
+      "version": "1.6.1",
+      "date": "2026-03-31",
+      "notes": "- 流式识别韧性大幅增强：按停止立即响应、不再重复粘贴、超时自动恢复\n- 连接中途断开时自动用完整录音重新识别（batch fallback）\n- 新增「绕过系统代理」选项\n- Deepgram 热词限制 30 个，设置页显示提示\n- 词库管理界面优化：替换映射按组显示、支持排序\n- ASR 设置自动填充默认值\n- 自动更新修复：不再对已签名 DMG 重复签名\n- AssemblyAI 多语言模型支持"
+    },
+    {
+      "version": "1.6.0",
+      "date": "2026-03-30",
+      "notes": "- 应用内更新：设置页直接下载新版本并自动安装重启，Local 版更新时保留本地模型\n- 新增 Apple Speech 识别引擎（macOS 原生，无需 API Key）\n- 修复长录音（40-70s+）按快捷键停止时文字丢失的问题\n- 火山引擎模型选项简化命名\n- ASR 服务启动时显示「启动中」状态提示\n- 片段替换引擎优化，移除冗余映射词条"
+    },
+    {
+      "version": "1.5.1",
+      "date": "2026-03-30",
+      "notes": "- 修复片段替换链式叠加 bug（\"Cloud Code\" 被替换成 \"Claudee Code\"）\n- 快捷键 event tap 健康检查：自动检测和恢复静默失效的全局快捷键\n- 辅助功能权限重试改进：5 次失败后提示重启 App\n- 新增 type4me:// URL scheme，支持外部工具触发词表刷新\n- 签名优化：自动创建持久化自签名证书，避免重编译后辅助功能权限失效\n- 移除 quarantine flag，防止 Accessibility 权限静默失效",
+      "cloud_dmg_url": "https://github.com/joewongjc/type4me/releases/download/v1.5.1/Type4Me-v1.5.1-cloud.dmg",
+      "cloud_dmg_size": 24540374,
+      "cloud_dmg_sha256": "6eb436b248eb678d0009921ff4a729f8ddfaa248eb7dda3f31980a9158cb2cf7"
+    },
+    {
+      "version": "1.5.0",
+      "date": "2026-03-30",
+      "notes": "- Dual-ASR 架构：SenseVoice 流式识别 + Qwen3-ASR 精准校验，说话时实时出字，停顿和松手后自动精校\n- Local 版内嵌双 ASR 模型开箱即用，LLM 润色可接 Ollama 或云端 API\n- 设置页：SenseVoice 和 Qwen3-ASR 独立启停按钮，LLM 启停 + 内存释放\n- 热词/片段存储迁移到 JSON 文件，支持内置词表 + 用户自定义，Finder 直接编辑\n- 词汇表 UI 全新设计：内置词数统计、一键打开编辑、刷新按钮\n- Bug 修复：进程泄漏（PID 文件管理）、退出清理、PyTorch detach、配置持久化、端口检测"
+    },
+    {
+      "version": "1.4.0",
+      "date": "2026-03-30",
+      "notes": "- 本地语音识别全面升级为 SenseVoice（阿里开源模型），替代原有 SherpaOnnx/Paraformer\n- 两阶段识别：说话时实时显示文字（流式），松手后自动校正提高准确率（完整音频推理）\n- 性能大幅提升：ONNX int8 量化推理，流式延迟从 475ms 降至 16ms/chunk，首字延迟从 ~1.5s 降至 ~0.5s\n- 新增 cloud/local 两个 DMG 版本：完整版内嵌模型开箱即用（~1.1GB），精简版仅云端识别（~23MB）\n- 热词增强：多词热词自动拆分兼容 BPE 编码，支持 context-score 权重调节\n- 剪贴板注入优化：改进注入成功检测和音频引擎稳定性\n- 云端版首次启动自动切换到火山引擎，新用户开箱体验更顺畅"
+    },
+    {
+      "version": "1.3.7",
+      "date": "2026-03-29",
+      "notes": "- 新增「保留剪贴板」设置：开启后语音输入不再覆盖剪贴板内容 (#57)\n- 剪贴板智能恢复：关闭时注入成功自动恢复原始剪贴板，失败时保留识别文本\n- 优化注入成功检测：扩展非编辑角色识别，区分无聚焦元素与 Electron 应用\n- 启动时显示 Dock 图标，关闭窗口后自动隐藏到菜单栏"
+    },
     {
       "version": "1.3.6",
       "date": "2026-03-28",

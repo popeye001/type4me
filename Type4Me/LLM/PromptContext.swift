@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import os
 
 /// Captures context variables available for LLM prompt template expansion.
 /// Captured at recording start so `{selected}` reflects the user's selection
@@ -10,17 +11,18 @@ struct PromptContext: Sendable {
 
     /// Capture the current selected text (via Accessibility) and clipboard content.
     /// Clipboard is read on MainActor (AppKit requirement).
-    /// AX calls run on a background thread with a short timeout.
-    @MainActor
-    static func capture() -> PromptContext {
-        let clipboard = NSPasteboard.general.string(forType: .string) ?? ""
-        let selected = readSelectedTextWithTimeout(ms: 200) ?? ""
+    /// AX calls run on a detached task with a short timeout.
+    static func capture() async -> PromptContext {
+        let clipboard = await MainActor.run {
+            NSPasteboard.general.string(forType: .string) ?? ""
+        }
+        let selected = await readSelectedTextAsync(timeoutMs: 500)
         return PromptContext(selectedText: selected, clipboardText: clipboard)
     }
 
-    /// Expand context variables (`{selected}`, `{clipboard}`) in a prompt string.
-    /// Uses single-pass replacement to prevent user content containing `{clipboard}`
-    /// or `{text}` from being expanded as variables.
+    /// Expand context variables (`{selected}`, `{clipboard}`, `{tools_json}`) in
+    /// a prompt string. Uses single-pass replacement to prevent user content
+    /// containing `{clipboard}` or `{text}` from being expanded as variables.
     func expandContextVariables(_ prompt: String) -> String {
         var result = ""
         var remaining = prompt[...]
@@ -35,6 +37,9 @@ struct PromptContext: Sendable {
             } else if remaining.hasPrefix("{clipboard}") {
                 result += clipboardText
                 remaining = remaining[remaining.index(remaining.startIndex, offsetBy: 11)...]
+            } else if remaining.hasPrefix("{tools_json}") {
+                result += ActionRegistry.toolsJSON()
+                remaining = remaining[remaining.index(remaining.startIndex, offsetBy: 12)...]
             } else {
                 result += "{"
                 remaining = remaining[remaining.index(after: remaining.startIndex)...]
@@ -46,27 +51,28 @@ struct PromptContext: Sendable {
 
     // MARK: - Private
 
-    /// Read selected text with a hard timeout to prevent UI hangs.
+    /// Read selected text with a hard timeout to prevent hangs.
     /// AXUIElementCopyAttributeValue is synchronous IPC — if the target app's
     /// accessibility implementation is slow or deadlocked, it blocks indefinitely.
-    /// Uses a heap-allocated box to avoid write-after-return on the stack.
-    private static func readSelectedTextWithTimeout(ms: Int) -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-
-        final class Box: @unchecked Sendable { var value: String?; init() {} }
-        let box = Box()
-        let semaphore = DispatchSemaphore(value: 0)
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            box.value = readSelectedText()
-            semaphore.signal()
+    /// Uses two racing detached tasks (AX read vs timeout) with OSAllocatedUnfairLock
+    /// to ensure the continuation is resumed exactly once.
+    private static func readSelectedTextAsync(timeoutMs: Int) async -> String {
+        guard AXIsProcessTrusted() else { return "" }
+        return await withCheckedContinuation { continuation in
+            let finished = OSAllocatedUnfairLock(initialState: false)
+            Task.detached {
+                let text = readSelectedText() ?? ""
+                if finished.withLock({ let old = $0; $0 = true; return !old }) {
+                    continuation.resume(returning: text)
+                }
+            }
+            Task.detached {
+                try? await Task.sleep(for: .milliseconds(timeoutMs))
+                if finished.withLock({ let old = $0; $0 = true; return !old }) {
+                    continuation.resume(returning: "")
+                }
+            }
         }
-
-        let timeout = DispatchTime.now() + .milliseconds(ms)
-        if semaphore.wait(timeout: timeout) == .timedOut {
-            return nil
-        }
-        return box.value
     }
 
     private static func readSelectedText() -> String? {

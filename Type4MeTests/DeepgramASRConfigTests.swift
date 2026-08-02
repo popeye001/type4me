@@ -14,6 +14,13 @@ final class DeepgramASRConfigTests: XCTestCase {
         XCTAssertTrue(config.isValid)
     }
 
+    func testSupportedModelsExposeCurrentNova3Options() {
+        XCTAssertEqual(DeepgramASRConfig.supportedModels.first, "nova-3")
+        XCTAssertTrue(DeepgramASRConfig.supportedModels.contains("nova-3-general"))
+        XCTAssertTrue(DeepgramASRConfig.supportedModels.contains("nova-3-medical"))
+        XCTAssertFalse(DeepgramASRConfig.supportedModels.contains("flux-general-multi"))
+    }
+
     func testInit_rejectsMissingAPIKey() {
         XCTAssertNil(DeepgramASRConfig(credentials: [:]))
     }

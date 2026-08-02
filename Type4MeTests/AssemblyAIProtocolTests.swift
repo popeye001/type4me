@@ -3,10 +3,10 @@ import XCTest
 
 final class AssemblyAIProtocolTests: XCTestCase {
 
-    func testBuildWebSocketURL_usesExpectedQueryItemsForUniversalStreaming() throws {
+    func testBuildWebSocketURL_usesExpectedQueryItemsForUniversal35Pro() throws {
         let config = try XCTUnwrap(AssemblyAIASRConfig(credentials: [
             "apiKey": "aa_test_key",
-            "model": "universal-streaming-multilingual",
+            "model": "universal-3-5-pro",
         ]))
 
         let url = try AssemblyAIProtocol.buildWebSocketURL(
@@ -25,12 +25,33 @@ final class AssemblyAIProtocolTests: XCTestCase {
         XCTAssertEqual(components.path, "/v3/ws")
         XCTAssertEqual(items.value(for: "sample_rate"), "16000")
         XCTAssertEqual(items.value(for: "encoding"), "pcm_s16le")
+        XCTAssertEqual(items.value(for: "speech_model"), "universal-3-5-pro")
+        XCTAssertNil(items.value(for: "format_turns"))
+        XCTAssertNil(items.value(for: "keyterms_prompt"))
+
+        let hotwords = [" Type4Me ", String(repeating: "a", count: 70), "keep-me"]
+        let updateJSON = try XCTUnwrap(AssemblyAIProtocol.updateConfigurationMessage(hotwords: hotwords))
+        let updateObj = try JSONSerialization.jsonObject(with: Data(updateJSON.utf8)) as? [String: Any]
+        XCTAssertEqual(updateObj?["type"] as? String, "UpdateConfiguration")
+        let terms = try XCTUnwrap(updateObj?["keyterms_prompt"] as? [String])
+        XCTAssertEqual(terms, ["Type4Me", String(repeating: "a", count: 50), "keep-me"])
+    }
+
+    func testBuildWebSocketURL_usesFormatTurnsForLegacyUniversalStreaming() throws {
+        let config = try XCTUnwrap(AssemblyAIASRConfig(credentials: [
+            "apiKey": "aa_test_key",
+            "model": "universal-streaming-multilingual",
+        ]))
+
+        let url = try AssemblyAIProtocol.buildWebSocketURL(
+            config: config,
+            options: ASRRequestOptions(enablePunc: true)
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let items = components.queryItems ?? []
+
         XCTAssertEqual(items.value(for: "speech_model"), "universal-streaming-multilingual")
         XCTAssertEqual(items.value(for: "format_turns"), "true")
-        XCTAssertEqual(
-            items.value(for: "keyterms_prompt"),
-            "[\"Type4Me\",\"\(String(repeating: "a", count: 50))\",\"keep-me\"]"
-        )
     }
 
     func testBuildWebSocketURL_omitsFormatTurnsForU3() throws {
@@ -47,7 +68,11 @@ final class AssemblyAIProtocolTests: XCTestCase {
         let items = components.queryItems ?? []
 
         XCTAssertNil(items.value(for: "format_turns"))
-        XCTAssertEqual(items.value(for: "keyterms_prompt"), "[\"alpha\"]")
+        XCTAssertNil(items.value(for: "keyterms_prompt"))
+
+        let u3Update = try XCTUnwrap(AssemblyAIProtocol.updateConfigurationMessage(hotwords: ["alpha"]))
+        let u3Obj = try JSONSerialization.jsonObject(with: Data(u3Update.utf8)) as? [String: Any]
+        XCTAssertEqual(u3Obj?["keyterms_prompt"] as? [String], ["alpha"])
     }
 
     func testParseServerEvent_parsesBegin() throws {

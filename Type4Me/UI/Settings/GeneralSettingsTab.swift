@@ -3,1191 +3,6 @@ import ServiceManagement
 import AVFoundation
 import ApplicationServices
 
-// MARK: - Shared Types
-
-enum SettingsTestStatus: Equatable {
-    case idle, testing, saved, success, failed(String)
-
-    var buttonForeground: Color {
-        switch self {
-        case .idle, .testing:  return TF.settingsText
-        case .saved, .success: return TF.settingsAccentGreen
-        case .failed:          return TF.settingsAccentRed
-        }
-    }
-
-    var buttonBackground: Color {
-        switch self {
-        case .idle, .testing:  return TF.settingsCardAlt
-        case .saved, .success: return TF.settingsAccentGreen.opacity(0.12)
-        case .failed:          return TF.settingsAccentRed.opacity(0.12)
-        }
-    }
-}
-
-// MARK: - Shared UI Helpers
-
-fileprivate protocol SettingsCardHelpers {}
-
-@MainActor
-extension SettingsCardHelpers {
-
-    func settingsGroupCard<Content: View>(
-        _ title: String,
-        icon: String? = nil,
-        trailing: AnyView? = nil,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(TF.settingsAccentAmber)
-                }
-                Text(title.uppercased())
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(1.2)
-                    .foregroundStyle(TF.settingsTextTertiary)
-                Spacer()
-                if let trailing {
-                    trailing
-                }
-            }
-            .padding(.bottom, 14)
-
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(TF.settingsBg)
-        )
-    }
-
-    func settingsField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(TF.settingsTextTertiary)
-            FixedWidthTextField(text: text, placeholder: prompt)
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
-        }
-        .padding(.vertical, 6)
-    }
-
-    func settingsPickerField(_ label: String, selection: Binding<String>, options: [FieldOption]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(TF.settingsTextTertiary)
-            settingsDropdown(
-                selection: selection,
-                options: options.map { ($0.value, $0.label) }
-            )
-        }
-        .padding(.vertical, 6)
-    }
-
-    func settingsSecureField(_ label: String, text: Binding<String>, prompt: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(TF.settingsTextTertiary)
-            FixedWidthSecureField(text: text, placeholder: prompt)
-                .padding(.horizontal, 12)
-                .frame(height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
-        }
-        .padding(.vertical, 6)
-    }
-
-    func credentialSummaryCard(rows: [(String, String)]) -> some View {
-        let pairedRows = stride(from: 0, to: rows.count, by: 2).map { i in
-            Array(rows[i..<min(i+2, rows.count)])
-        }
-        return VStack(spacing: 0) {
-            ForEach(Array(pairedRows.enumerated()), id: \.offset) { index, pair in
-                if index > 0 { SettingsDivider() }
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(Array(pair.enumerated()), id: \.offset) { _, item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(item.0.uppercased())
-                                .font(.system(size: 10, weight: .semibold))
-                                .tracking(0.8)
-                                .foregroundStyle(TF.settingsTextTertiary)
-                            HStack {
-                                Text(item.1)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(TF.settingsTextSecondary)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 12)
-                            .frame(height: 36)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(TF.settingsCardAlt)
-                            )
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if pair.count == 1 {
-                        Spacer().frame(maxWidth: .infinity)
-                    }
-                }
-                .padding(.vertical, 6)
-            }
-        }
-    }
-
-    // MARK: - Custom Controls
-
-    /// Custom dropdown that matches the design mockup (rounded rect + chevron).
-    func settingsDropdown(selection: Binding<String>, options: [(value: String, label: String)], icon: String? = nil) -> some View {
-        let currentLabel = options.first(where: { $0.value == selection.wrappedValue })?.label ?? selection.wrappedValue
-        return Menu {
-            ForEach(options, id: \.value) { option in
-                Button {
-                    selection.wrappedValue = option.value
-                } label: {
-                    if option.value == selection.wrappedValue {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
-                    }
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 12))
-                        .foregroundStyle(TF.settingsTextTertiary)
-                }
-                Text(currentLabel)
-                    .font(.system(size: 13))
-                    .foregroundStyle(TF.settingsText)
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(TF.settingsTextTertiary)
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 36)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(TF.settingsCardAlt)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    /// Custom segmented picker with dark selected pill.
-    func settingsSegmentedPicker(selection: Binding<String>, options: [(value: String, label: String)]) -> some View {
-        HStack(spacing: 0) {
-            ForEach(options, id: \.value) { option in
-                let isSelected = selection.wrappedValue == option.value
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        selection.wrappedValue = option.value
-                    }
-                } label: {
-                    Text(option.label)
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .foregroundStyle(isSelected ? .white : TF.settingsText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isSelected ? TF.settingsNavActive : .clear)
-                        )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(3)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(TF.settingsCardAlt)
-        )
-    }
-
-    func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsAccentAmber))
-    }
-
-    func secondaryButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(TF.settingsText)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
-    }
-
-    func saveButton(action: @escaping () -> Void) -> some View {
-        primaryButton(L("保存", "Save"), action: action)
-    }
-
-    /// A "test connection" button that shows its own status inline.
-    func testButton(_ title: String, status: SettingsTestStatus, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                switch status {
-                case .idle:
-                    Text(title)
-                case .testing:
-                    ProgressView()
-                        .scaleEffect(0.5)
-                        .frame(width: 12, height: 12)
-                    Text(title)
-                case .saved:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                    Text(L("已保存", "Saved"))
-                case .success:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12))
-                    Text(L("连接成功", "Connected"))
-                case .failed(let msg):
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 12))
-                    Text(msg)
-                }
-            }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundStyle(status.buttonForeground)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8).fill(status.buttonBackground))
-        }
-        .buttonStyle(.plain)
-        .disabled(status == .testing)
-    }
-
-    func maskedSecret(_ value: String) -> String {
-        guard !value.isEmpty else { return L("未设置", "Not set") }
-        guard value.count > 8 else { return L("已保存", "Saved") }
-        let prefix = value.prefix(4)
-        let suffix = value.suffix(4)
-        return "\(prefix)••••\(suffix)"
-    }
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MARK: - ASR Settings Card
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-struct ASRSettingsCard: View, SettingsCardHelpers {
-
-    @State private var selectedASRProvider: ASRProvider = .volcano
-    @State private var asrCredentialValues: [String: String] = [:]
-    @State private var savedASRValues: [String: String] = [:]
-    @State private var editedFields: Set<String> = []
-    @State private var asrTestStatus: SettingsTestStatus = .idle
-    @State private var isEditingASR = true
-    @State private var hasStoredASR = false
-    @State private var testTask: Task<Void, Never>?
-    /// Hint shown below ASR credentials when only bigasr works (not seed 2.0)
-    @State private var volcResourceHint: String?
-
-    // Local model states
-    @State private var selectedStreamingModel: ModelManager.StreamingModel = ModelManager.selectedStreamingModel
-    @State private var modelDownloadStatus: [ModelManager.StreamingModel: Bool] = [:]
-    @State private var downloadingModel: ModelManager.StreamingModel? = nil
-    @State private var downloadProgress: Double = 0
-    @State private var downloadTask: Task<Void, Error>? = nil
-    @State private var confirmingDelete: ModelManager.StreamingModel? = nil
-
-    private var currentASRFields: [CredentialField] {
-        ASRProviderRegistry.configType(for: selectedASRProvider)?.credentialFields ?? []
-    }
-
-    /// Effective values: saved base + dirty edits overlaid (including clears).
-    private var effectiveASRValues: [String: String] {
-        var result = savedASRValues
-        for key in editedFields {
-            result[key] = asrCredentialValues[key] ?? ""
-        }
-        return result
-    }
-
-    private var hasASRCredentials: Bool {
-        let required = currentASRFields.filter { !$0.isOptional }
-        let effective = effectiveASRValues
-        return required.allSatisfy { field in
-            !(effective[field.key] ?? "").isEmpty
-        }
-    }
-
-    private var isASRProviderAvailable: Bool {
-        ASRProviderRegistry.entry(for: selectedASRProvider)?.isAvailable ?? false
-    }
-
-    private var currentASRGuideLinks: [(prefix: String?, label: String, url: URL)] {
-        switch selectedASRProvider {
-        case .volcano:
-            return [(L("查看", "View"), L("配置指南", "setup guide"), URL(string: "https://my.feishu.cn/wiki/QdEnwBMfUi0mN4k3ucMcNYhUnXr")!)]
-        case .deepgram:
-            return [
-                (L("可用模型", "Models"), L("查看", "view"), URL(string: "https://developers.deepgram.com/docs/models-languages-overview/")!),
-                (L("API Key", "API Key"), L("获取", "get"), URL(string: "https://developers.deepgram.com/docs/create-additional-api-keys")!),
-            ]
-        case .assemblyai:
-            return [
-                (L("可用模型", "Models"), L("查看", "view"), URL(string: "https://www.assemblyai.com/docs/getting-started/models")!),
-                (L("API Key", "API Key"), L("获取", "get"), URL(string: "https://www.assemblyai.com/docs/faq/how-to-get-your-api-key")!),
-            ]
-        case .soniox:
-            return [
-                (L("可用模型", "Models"), L("查看", "view"), URL(string: "https://soniox.com/docs/stt/models")!),
-                (L("API Key", "API Key"), L("获取", "get"), URL(string: "https://console.soniox.com")!),
-            ]
-        case .bailian:
-            return [
-                (L("可用模型", "Models"), L("查看", "view"), URL(string: "https://help.aliyun.com/zh/model-studio/fun-asr-realtime-websocket-api")!),
-                (L("API Key", "API Key"), L("获取", "get"), URL(string: "https://help.aliyun.com/zh/model-studio/get-api-key")!),
-            ]
-        default:
-            return []
-        }
-    }
-
-    // MARK: Body
-
-    var body: some View {
-        settingsGroupCard(L("语音识别引擎", "ASR Provider"), icon: "mic.fill") {
-            asrProviderPicker
-            if !currentASRGuideLinks.isEmpty {
-                HStack(spacing: 6) {
-                    ForEach(Array(currentASRGuideLinks.enumerated()), id: \.offset) { index, link in
-                        if index > 0 {
-                            Text("·").font(.system(size: 10)).foregroundStyle(TF.settingsTextTertiary)
-                        }
-                        if let prefix = link.prefix {
-                            Text(prefix).font(.system(size: 10)).foregroundStyle(TF.settingsTextTertiary)
-                        }
-                        Link(link.label, destination: link.url)
-                            .font(.system(size: 10, weight: .medium))
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-            SettingsDivider()
-
-            if selectedASRProvider.isLocal {
-                localModelSection
-            } else {
-                if hasASRCredentials && !isEditingASR {
-                    credentialSummaryCard(rows: asrSummaryRows)
-                } else {
-                    dynamicCredentialFields
-                }
-
-                HStack(spacing: 8) {
-                    Spacer()
-                    testButton(L("测试连接", "Test"), status: asrTestStatus) { testASRConnection() }
-                        .disabled(!hasASRCredentials || !isASRProviderAvailable)
-                    if hasASRCredentials && !isEditingASR {
-                        secondaryButton(L("修改", "Edit")) {
-                            testTask?.cancel()
-                            asrTestStatus = .idle
-                            asrCredentialValues = [:]
-                            editedFields = []
-                            isEditingASR = true
-                        }
-                    } else {
-                        if hasASRCredentials && hasStoredASR {
-                            secondaryButton(L("取消", "Cancel")) {
-                                testTask?.cancel()
-                                asrTestStatus = .idle
-                                loadASRCredentials()
-                            }
-                        }
-                        primaryButton(L("保存", "Save")) { saveASRCredentials() }
-                            .disabled(!hasASRCredentials)
-                    }
-                }
-                .padding(.top, 12)
-
-                if let hint = volcResourceHint {
-                    Text(hint)
-                        .font(.system(size: 11))
-                        .foregroundStyle(TF.settingsAccentAmber)
-                        .padding(.top, 4)
-                }
-            }
-        }
-        .task {
-            loadASRCredentials()
-            refreshModelStatus()
-        }
-    }
-
-    // MARK: - Provider Picker
-
-    private var asrProviderPicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L("识别引擎", "Provider").uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(TF.settingsTextTertiary)
-            HStack(spacing: 10) {
-                settingsDropdown(
-                    selection: Binding(
-                        get: { selectedASRProvider.rawValue },
-                        set: { if let p = ASRProvider(rawValue: $0) { selectedASRProvider = p } }
-                    ),
-                    options: ASRProvider.allCases
-                        .filter { $0.isLocal || (ASRProviderRegistry.entry(for: $0)?.isAvailable ?? false) }
-                        .map { ($0.rawValue, $0.displayName) }
-                )
-                if selectedASRProvider.isLocal && (modelDownloadStatus[selectedStreamingModel] ?? false) {
-                    testButton(L("测试模型", "Test Model"), status: asrTestStatus) { testLocalModel() }
-                }
-            }
-        }
-        .padding(.vertical, 6)
-        .onChange(of: selectedASRProvider) { _, newProvider in
-            testTask?.cancel()
-            downloadTask?.cancel()
-            downloadTask = nil
-            downloadingModel = nil
-            downloadProgress = 0
-            asrTestStatus = .idle
-            isEditingASR = true
-            // Persist provider switch immediately (don't require a separate "save")
-            KeychainService.selectedASRProvider = newProvider
-            loadASRCredentialsForProvider(newProvider)
-            refreshModelStatus()
-        }
-    }
-
-    // MARK: - Credential Fields
-
-    private var dynamicCredentialFields: some View {
-        let fields = currentASRFields
-        let rows = stride(from: 0, to: fields.count, by: 2).map { i in
-            Array(fields[i..<min(i+2, fields.count)])
-        }
-        return VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                if index > 0 { SettingsDivider() }
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(row) { field in
-                        credentialFieldRow(field)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if row.count == 1 {
-                        Spacer().frame(maxWidth: .infinity)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func credentialFieldRow(_ field: CredentialField) -> some View {
-        let binding = Binding<String>(
-            get: { asrCredentialValues[field.key] ?? "" },
-            set: {
-                asrCredentialValues[field.key] = $0
-                editedFields.insert(field.key)
-            }
-        )
-        if !field.options.isEmpty {
-            let pickerBinding = Binding<String>(
-                get: {
-                    let val = asrCredentialValues[field.key] ?? ""
-                    return val.isEmpty ? (savedASRValues[field.key] ?? field.defaultValue) : val
-                },
-                set: {
-                    asrCredentialValues[field.key] = $0
-                    editedFields.insert(field.key)
-                }
-            )
-            settingsPickerField(field.label, selection: pickerBinding, options: field.options)
-        } else {
-            let savedVal = savedASRValues[field.key] ?? ""
-            let placeholder = savedVal.isEmpty ? field.placeholder : maskedSecret(savedVal)
-            settingsField(field.label, text: binding, prompt: placeholder)
-        }
-    }
-
-    private var asrSummaryRows: [(String, String)] {
-        var rows: [(String, String)] = []
-        for field in currentASRFields {
-            let val = asrCredentialValues[field.key] ?? ""
-            guard !val.isEmpty else { continue }
-            rows.append((field.label, maskedSecret(val)))
-        }
-        return rows
-    }
-
-    // MARK: - Local Model Section
-
-    private var localModelSection: some View {
-        VStack(spacing: 0) {
-            if !isASRProviderAvailable {
-                // SherpaOnnx framework not compiled — guide user
-                localASRBuildGuide
-            } else {
-                ForEach(Array(ModelManager.StreamingModel.allCases.enumerated()), id: \.element) { index, model in
-                    if index > 0 { SettingsDivider() }
-                    modelRow(model)
-                }
-            }
-        }
-    }
-
-    private func modelRow(_ model: ModelManager.StreamingModel) -> some View {
-        let isDownloaded = modelDownloadStatus[model] ?? false
-        let isSelected = selectedStreamingModel == model
-        let isDownloading = downloadingModel == model
-
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                if isDownloaded || isDownloading {
-                    // Radio button — only for downloaded/downloading models
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(isSelected ? TF.settingsAccentGreen : TF.settingsTextTertiary)
-                        .onTapGesture {
-                            guard isDownloaded else { return }
-                            selectedStreamingModel = model
-                            ModelManager.selectedStreamingModel = model
-                            asrTestStatus = .idle
-                            let defaults = ["modelDir": ModelManager.defaultModelsDir]
-                            try? KeychainService.saveASRCredentials(for: .sherpa, values: defaults)
-                            KeychainService.selectedASRProvider = .sherpa
-                        }
-                } else {
-                    // Not downloaded: download button on the left
-                    Button(L("下载", "Download")) { startDownload(model) }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 3)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(TF.settingsAccentAmber))
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(model.displayName)
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(isDownloaded ? TF.settingsText : TF.settingsTextTertiary)
-                        Text("~\(model.approximateSizeMB) MB")
-                            .font(.system(size: 10))
-                            .foregroundStyle(TF.settingsTextTertiary)
-                    }
-                    Text(model.description)
-                        .font(.system(size: 10))
-                        .foregroundStyle(TF.settingsTextSecondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-
-                // Action area (only for downloaded models)
-                if isDownloaded {
-                    HStack(spacing: 6) {
-                        if confirmingDelete == model {
-                            Button(L("确认删除", "Confirm")) { deleteModel(model) }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(RoundedRectangle(cornerRadius: 4).fill(TF.settingsAccentRed))
-                            Button(L("取消", "Cancel")) { confirmingDelete = nil }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(TF.settingsTextSecondary)
-                        } else {
-                            Button {
-                                confirmingDelete = model
-                            } label: {
-                                Image(systemName: "ellipsis.circle")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(TF.settingsTextTertiary)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-
-            // Download progress
-            if isDownloading {
-                HStack(spacing: 8) {
-                    ProgressView(value: downloadProgress)
-                        .tint(TF.settingsAccentAmber)
-                    Text("\(Int(downloadProgress * 100))%")
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
-                        .foregroundStyle(TF.settingsTextSecondary)
-                        .frame(width: 30, alignment: .trailing)
-                    Button(L("取消", "Cancel")) { cancelDownload() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(TF.settingsTextSecondary)
-                }
-                .padding(.leading, 22)
-            }
-        }
-        .padding(.vertical, 8)
-    }
-
-    private func refreshModelStatus() {
-        for model in ModelManager.StreamingModel.allCases {
-            modelDownloadStatus[model] = ModelManager.shared.isModelAvailable(model)
-        }
-        selectedStreamingModel = ModelManager.selectedStreamingModel
-    }
-
-    private func startDownload(_ model: ModelManager.StreamingModel) {
-        // Cancel any existing download first
-        if downloadingModel != nil {
-            cancelDownload()
-        }
-        downloadingModel = model
-        downloadProgress = 0
-        asrTestStatus = .idle
-        downloadTask = Task {
-            do {
-                try await ModelManager.shared.downloadModel(model) { progress in
-                    Task { @MainActor in
-                        // Only update if this model is still the one being downloaded
-                        guard self.downloadingModel == model else { return }
-                        self.downloadProgress = progress
-                    }
-                }
-                await MainActor.run {
-                    guard downloadingModel == model else { return }
-                    downloadingModel = nil
-                    refreshModelStatus()
-                    // Auto-select if first download
-                    if modelDownloadStatus.values.filter({ $0 }).count == 1 {
-                        selectedStreamingModel = model
-                        ModelManager.selectedStreamingModel = model
-                        let defaults = ["modelDir": ModelManager.defaultModelsDir]
-                        try? KeychainService.saveASRCredentials(for: .sherpa, values: defaults)
-                        KeychainService.selectedASRProvider = .sherpa
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    guard downloadingModel == model else { return }
-                    downloadingModel = nil
-                    if !Task.isCancelled {
-                        asrTestStatus = .failed(L("下载失败", "Download failed"))
-                    }
-                }
-            }
-        }
-    }
-
-    private func cancelDownload() {
-        guard let model = downloadingModel else { return }
-        downloadTask?.cancel()
-        downloadTask = nil
-        downloadingModel = nil
-        Task { await ModelManager.shared.cancelDownload(model) }
-    }
-
-    private func deleteModel(_ model: ModelManager.StreamingModel) {
-        Task {
-            try? await ModelManager.shared.deleteModel(model)
-            await MainActor.run {
-                confirmingDelete = nil
-                modelDownloadStatus[model] = false
-                if selectedStreamingModel == model {
-                    // Select another downloaded model, or keep current
-                    if let alt = ModelManager.StreamingModel.allCases.first(where: {
-                        modelDownloadStatus[$0] == true
-                    }) {
-                        selectedStreamingModel = alt
-                        ModelManager.selectedStreamingModel = alt
-                    }
-                }
-                asrTestStatus = .idle
-            }
-        }
-    }
-
-    private var localASRBuildGuide: some View {
-        HStack(spacing: 4) {
-            Text(L("本地暂未部署识别引擎，请查看", "Local ASR engine not deployed. See"))
-                .font(.system(size: 12))
-                .foregroundStyle(TF.settingsTextSecondary)
-            Link(
-                L("GitHub 详细指引", "GitHub instructions"),
-                destination: URL(string: "https://github.com/joewongjc/type4me#方式二从源码构建")!
-            )
-            .font(.system(size: 12, weight: .medium))
-        }
-        .padding(.vertical, 8)
-    }
-
-    private func testLocalModel() {
-        testTask?.cancel()
-        asrTestStatus = .testing
-        testTask = Task {
-            #if HAS_SHERPA_ONNX
-            do {
-                let config = SherpaASRConfig(credentials: ["modelDir": ModelManager.defaultModelsDir])
-                guard let config else {
-                    guard !Task.isCancelled else { return }
-                    asrTestStatus = .failed(L("配置错误", "Config error"))
-                    return
-                }
-                let client = SherpaASRClient()
-                try await client.connect(config: config, options: currentASRRequestOptions(enablePunc: false))
-                await client.disconnect()
-                guard !Task.isCancelled else { return }
-                asrTestStatus = .success
-            } catch {
-                guard !Task.isCancelled else { return }
-                asrTestStatus = .failed(L("加载失败", "Load failed"))
-            }
-            #else
-            asrTestStatus = .failed(L("SherpaOnnx 未编译", "SherpaOnnx not available"))
-            #endif
-        }
-    }
-
-    // MARK: - Data
-
-    private func loadASRCredentials() {
-        selectedASRProvider = KeychainService.selectedASRProvider
-        loadASRCredentialsForProvider(selectedASRProvider)
-    }
-
-    private func loadASRCredentialsForProvider(_ provider: ASRProvider) {
-        testTask?.cancel()
-        editedFields = []
-        if let values = KeychainService.loadASRCredentials(for: provider) {
-            asrCredentialValues = values
-            savedASRValues = values
-            hasStoredASR = true
-            isEditingASR = !hasASRCredentials
-        } else {
-            var defaults: [String: String] = [:]
-            let fields = ASRProviderRegistry.configType(for: provider)?.credentialFields ?? []
-            for field in fields where !field.defaultValue.isEmpty {
-                defaults[field.key] = field.defaultValue
-            }
-            asrCredentialValues = defaults
-            savedASRValues = [:]
-            hasStoredASR = false
-            isEditingASR = true
-        }
-    }
-
-    private func saveASRCredentials() {
-        let values = effectiveASRValues
-        do {
-            try KeychainService.saveASRCredentials(for: selectedASRProvider, values: values)
-            KeychainService.selectedASRProvider = selectedASRProvider
-            asrCredentialValues = values
-            savedASRValues = values
-            editedFields = []
-            hasStoredASR = true
-            isEditingASR = false
-            asrTestStatus = .saved
-        } catch {
-            asrTestStatus = .failed(L("保存失败", "Save failed"))
-        }
-    }
-
-    private func testASRConnection() {
-        testTask?.cancel()
-        asrTestStatus = .testing
-        volcResourceHint = nil
-        let testValues = effectiveASRValues
-        let provider = selectedASRProvider
-        testTask = Task {
-            // Volcengine: auto-detect when "auto" is selected
-            if provider == .volcano && (testValues["resourceId"] ?? "") == VolcanoASRConfig.resourceIdAuto {
-                await testVolcanoWithAutoResource(baseValues: testValues)
-                return
-            }
-            do {
-                guard let configType = ASRProviderRegistry.configType(for: provider),
-                      let config = configType.init(credentials: testValues),
-                      let client = ASRProviderRegistry.createClient(for: provider)
-                else {
-                    guard !Task.isCancelled else { return }
-                    asrTestStatus = .failed(L("不支持", "Unsupported"))
-                    return
-                }
-                try await client.connect(config: config, options: currentASRRequestOptions(enablePunc: false))
-                await client.disconnect()
-                guard !Task.isCancelled else { return }
-                asrTestStatus = .success
-            } catch {
-                guard !Task.isCancelled else { return }
-                asrTestStatus = .failed(Self.describeConnectionError(error))
-            }
-        }
-    }
-
-    /// Test both Volcengine resource IDs and pick the best one.
-    /// Saves with resourceId="auto" so the picker stays on "Auto", and stores the
-    /// resolved ID in "resolvedResourceId" for actual connections.
-    private func testVolcanoWithAutoResource(baseValues: [String: String]) async {
-        let options = currentASRRequestOptions(enablePunc: false)
-        let seedId = VolcanoASRConfig.resourceIdSeedASR
-        let bigId = VolcanoASRConfig.resourceIdBigASR
-
-        // Test Seed ASR 2.0 first (cheaper)
-        let seedOK = await testVolcResource(baseValues: baseValues, resourceId: seedId, options: options)
-        guard !Task.isCancelled else { return }
-
-        if seedOK {
-            var values = baseValues
-            values["resourceId"] = VolcanoASRConfig.resourceIdAuto
-            values["resolvedResourceId"] = seedId
-            saveASRCredentialsQuietly(values)
-            asrTestStatus = .success
-            return
-        }
-
-        // Seed 2.0 failed, try bigasr
-        let bigOK = await testVolcResource(baseValues: baseValues, resourceId: bigId, options: options)
-        guard !Task.isCancelled else { return }
-
-        if bigOK {
-            var values = baseValues
-            values["resourceId"] = VolcanoASRConfig.resourceIdAuto
-            values["resolvedResourceId"] = bigId
-            saveASRCredentialsQuietly(values)
-            asrTestStatus = .success
-            volcResourceHint = L(
-                "当前使用大模型版本，开通「模型 2.0」可节省约 80% 费用，识别效果相同",
-                "Using bigmodel tier. Enable \"Model 2.0\" for ~80% cost savings with identical quality"
-            )
-            return
-        }
-
-        // Both failed
-        asrTestStatus = .failed(L("连接失败，请检查 App ID 和 Access Token", "Connection failed, check App ID & Access Token"))
-    }
-
-    private func testVolcResource(baseValues: [String: String], resourceId: String, options: ASRRequestOptions) async -> Bool {
-        var values = baseValues
-        values["resourceId"] = resourceId
-        guard let config = VolcanoASRConfig(credentials: values) else { return false }
-        let client = VolcASRClient()
-        do {
-            try await client.connect(config: config, options: options)
-            await client.disconnect()
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    private func saveASRCredentialsQuietly(_ values: [String: String]) {
-        do {
-            try KeychainService.saveASRCredentials(for: .volcano, values: values)
-            KeychainService.selectedASRProvider = .volcano
-            asrCredentialValues = values
-            savedASRValues = values
-            editedFields = []
-            hasStoredASR = true
-            isEditingASR = false
-        } catch {}
-    }
-
-    private static func describeConnectionError(_ error: Error) -> String {
-        if let volc = error as? VolcASRError, case .serverRejected(_, let message) = volc {
-            return message ?? L("服务器拒绝连接", "Server rejected")
-        }
-        if let volc = error as? VolcProtocolError, case .serverError(let code, let message) = volc {
-            let desc = message ?? L("服务器错误", "Server error")
-            return code.map { "\(desc) (\($0))" } ?? desc
-        }
-        if let urlError = error as? URLError {
-            switch urlError.code {
-            case .notConnectedToInternet: return L("网络未连接", "No internet")
-            case .timedOut: return L("连接超时", "Timed out")
-            case .cannotFindHost, .cannotConnectToHost: return L("无法连接服务器", "Cannot reach server")
-            default: return urlError.localizedDescription
-            }
-        }
-        return L("连接失败", "Connection failed") + ": " + error.localizedDescription
-    }
-
-    private func currentASRRequestOptions(enablePunc: Bool) -> ASRRequestOptions {
-        let biasSettings = ASRBiasSettingsStorage.load()
-        return ASRRequestOptions(
-            enablePunc: enablePunc,
-            hotwords: HotwordStorage.load(),
-            boostingTableID: biasSettings.boostingTableID
-        )
-    }
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MARK: - LLM Settings Card
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-struct LLMSettingsCard: View, SettingsCardHelpers {
-
-    @State private var selectedLLMProvider: LLMProvider = .doubao
-    @State private var llmCredentialValues: [String: String] = [:]
-    @State private var savedLLMValues: [String: String] = [:]
-    @State private var editedFields: Set<String> = []
-    @State private var llmTestStatus: SettingsTestStatus = .idle
-    @State private var isEditingLLM = true
-    @State private var hasStoredLLM = false
-    @State private var testTask: Task<Void, Never>?
-
-    private var currentLLMFields: [CredentialField] {
-        LLMProviderRegistry.configType(for: selectedLLMProvider)?.credentialFields ?? []
-    }
-
-    /// Effective values: saved base + dirty edits overlaid.
-    private var effectiveLLMValues: [String: String] {
-        var result = savedLLMValues
-        for key in editedFields {
-            result[key] = llmCredentialValues[key] ?? ""
-        }
-        return result
-    }
-
-    private var hasLLMCredentials: Bool {
-        let required = currentLLMFields.filter { !$0.isOptional }
-        let effective = effectiveLLMValues
-        return required.allSatisfy { field in
-            !(effective[field.key] ?? "").isEmpty
-        }
-    }
-
-    // MARK: Body
-
-    var body: some View {
-        settingsGroupCard(L("LLM 文本处理", "LLM Settings"), icon: "gearshape.fill") {
-            llmProviderPicker
-            SettingsDivider()
-
-            if hasLLMCredentials && !isEditingLLM {
-                credentialSummaryCard(rows: llmSummaryRows)
-            } else {
-                dynamicCredentialFields
-            }
-
-            HStack(spacing: 8) {
-                Spacer()
-                testButton(L("测试连接", "Test"), status: llmTestStatus) { testLLMConnection() }
-                    .disabled(!hasLLMCredentials)
-                if hasLLMCredentials && !isEditingLLM {
-                    secondaryButton(L("修改", "Edit")) {
-                        testTask?.cancel()
-                        llmTestStatus = .idle
-                        llmCredentialValues = [:]
-                        editedFields = []
-                        isEditingLLM = true
-                    }
-                } else {
-                    if hasLLMCredentials && hasStoredLLM {
-                        secondaryButton(L("取消", "Cancel")) {
-                            testTask?.cancel()
-                            llmTestStatus = .idle
-                            loadLLMCredentials()
-                        }
-                    }
-                    primaryButton(L("保存", "Save")) { saveLLMCredentials() }
-                        .disabled(!hasLLMCredentials)
-                }
-            }
-            .padding(.top, 12)
-        }
-        .task {
-            loadLLMCredentials()
-        }
-    }
-
-    // MARK: - Provider Picker
-
-    private var llmProviderPicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L("服务商", "Provider").uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
-                .foregroundStyle(TF.settingsTextTertiary)
-            settingsDropdown(
-                selection: Binding(
-                    get: { selectedLLMProvider.rawValue },
-                    set: { if let p = LLMProvider(rawValue: $0) { selectedLLMProvider = p } }
-                ),
-                options: LLMProvider.allCases.map { ($0.rawValue, $0.displayName) }
-            )
-        }
-        .padding(.vertical, 6)
-        .onChange(of: selectedLLMProvider) { _, newProvider in
-            testTask?.cancel()
-            llmTestStatus = .idle
-            isEditingLLM = true
-            loadLLMCredentialsForProvider(newProvider)
-        }
-    }
-
-    // MARK: - Credential Fields
-
-    private var dynamicCredentialFields: some View {
-        let fields = currentLLMFields
-        let rows = stride(from: 0, to: fields.count, by: 2).map { i in
-            Array(fields[i..<min(i+2, fields.count)])
-        }
-        return VStack(spacing: 0) {
-            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                if index > 0 { SettingsDivider() }
-                HStack(alignment: .top, spacing: 16) {
-                    ForEach(row) { field in
-                        credentialFieldRow(field)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    if row.count == 1 {
-                        Spacer().frame(maxWidth: .infinity)
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func credentialFieldRow(_ field: CredentialField) -> some View {
-        let binding = Binding<String>(
-            get: { llmCredentialValues[field.key] ?? "" },
-            set: {
-                llmCredentialValues[field.key] = $0
-                editedFields.insert(field.key)
-            }
-        )
-        if !field.options.isEmpty {
-            let pickerBinding = Binding<String>(
-                get: {
-                    let val = llmCredentialValues[field.key] ?? ""
-                    return val.isEmpty ? (savedLLMValues[field.key] ?? field.defaultValue) : val
-                },
-                set: {
-                    llmCredentialValues[field.key] = $0
-                    editedFields.insert(field.key)
-                }
-            )
-            settingsPickerField(field.label, selection: pickerBinding, options: field.options)
-        } else {
-            let savedVal = savedLLMValues[field.key] ?? ""
-            let placeholder = savedVal.isEmpty ? field.placeholder : maskedSecret(savedVal)
-            if field.isSecure {
-                settingsSecureField(field.label, text: binding, prompt: placeholder)
-            } else {
-                settingsField(field.label, text: binding, prompt: placeholder)
-            }
-        }
-    }
-
-    private var llmSummaryRows: [(String, String)] {
-        var rows: [(String, String)] = []
-        for field in currentLLMFields {
-            let val = llmCredentialValues[field.key] ?? ""
-            guard !val.isEmpty else { continue }
-            let display = field.isSecure ? maskedSecret(val) : val
-            rows.append((field.label, display))
-        }
-        return rows
-    }
-
-    // MARK: - Data
-
-    private func loadLLMCredentials() {
-        selectedLLMProvider = KeychainService.selectedLLMProvider
-        loadLLMCredentialsForProvider(selectedLLMProvider)
-    }
-
-    private func loadLLMCredentialsForProvider(_ provider: LLMProvider) {
-        testTask?.cancel()
-        editedFields = []
-        if let values = KeychainService.loadLLMCredentials(for: provider) {
-            llmCredentialValues = values
-            savedLLMValues = values
-            hasStoredLLM = true
-            isEditingLLM = !hasLLMCredentials
-        } else {
-            var defaults: [String: String] = [:]
-            let fields = LLMProviderRegistry.configType(for: provider)?.credentialFields ?? []
-            for field in fields where !field.defaultValue.isEmpty {
-                defaults[field.key] = field.defaultValue
-            }
-            llmCredentialValues = defaults
-            savedLLMValues = [:]
-            hasStoredLLM = false
-            isEditingLLM = true
-        }
-    }
-
-    private func saveLLMCredentials() {
-        let values = effectiveLLMValues
-        do {
-            try KeychainService.saveLLMCredentials(for: selectedLLMProvider, values: values)
-            KeychainService.selectedLLMProvider = selectedLLMProvider
-            llmCredentialValues = values
-            savedLLMValues = values
-            editedFields = []
-            hasStoredLLM = true
-            isEditingLLM = false
-            llmTestStatus = .saved
-        } catch {
-            llmTestStatus = .failed(L("保存失败", "Save failed"))
-        }
-    }
-
-    private func testLLMConnection() {
-        testTask?.cancel()
-        llmTestStatus = .testing
-        let testValues = effectiveLLMValues
-        let provider = selectedLLMProvider
-        testTask = Task {
-            do {
-                guard let configType = LLMProviderRegistry.configType(for: provider),
-                      let config = configType.init(credentials: testValues)
-                else {
-                    guard !Task.isCancelled else { return }
-                    llmTestStatus = .failed(L("配置无效", "Invalid config"))
-                    return
-                }
-                let llmConfig = config.toLLMConfig()
-                let client: any LLMClient = provider == .claude
-                    ? ClaudeChatClient()
-                    : DoubaoChatClient(provider: provider)
-                let reply = try await client.process(text: "hi", prompt: "{text}", config: llmConfig)
-                guard !Task.isCancelled else { return }
-                llmTestStatus = .success
-                NSLog("[Settings] LLM test OK (%@): %@", provider.rawValue, reply)
-            } catch {
-                guard !Task.isCancelled else { return }
-                NSLog("[Settings] LLM test failed (%@): %@", provider.rawValue, String(describing: error))
-                llmTestStatus = .failed(L("连接失败", "Connection failed"))
-            }
-        }
-    }
-}
-
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MARK: - General Settings Tab
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1199,12 +14,25 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
     @AppStorage("tf_startSound") private var startSound = StartSoundStyle.chime.rawValue
     @AppStorage("tf_launchAtLogin") private var launchAtLogin = true
     @AppStorage("tf_volumeReduction") private var volumeReduction = -1
-    @AppStorage("tf_visualStyle") private var visualStyle = "timeline"
+    @AppStorage(RecordingVisualStyle.storageKey) private var visualStyle = RecordingVisualStyle.defaultValue
     @AppStorage("tf_language") private var language = AppLanguage.systemDefault
-    @AppStorage("tf_escAbortEnabled") private var escAbortEnabled = true
+    @AppStorage("tf_preserveClipboard") private var preserveClipboard = true
+    @AppStorage("tf_showDockIcon") private var showDockIcon = true
+    @AppStorage("tf_bypassProxy") private var bypassProxy = "off"
+    @AppStorage("tf_stripTrailingPunctuation") private var stripTrailingPunctuation = "off"
+    @AppStorage("tf_preserveCJKLatinSpacing") private var preserveCJKLatinSpacing = true
+    @AppStorage("tf_hoverTranscriptPreview") private var hoverTranscriptPreview = true
+    @AppStorage("tf_micKeepAlive") private var micKeepAlive = false
+    @AppStorage(AudioInputDevicePreferenceStore.modeKey) private var microphonePreferenceMode = AudioInputDevicePreferenceMode.systemDefault.rawValue
+    @AppStorage(AudioInputDevicePreferenceStore.priorityEntriesKey) private var microphonePriorityEntriesStorage = ""
+    @AppStorage("tf_selectedSpeakerUID") private var selectedSpeakerUID = ""
 
     @State private var hasMic = false
     @State private var hasAccessibility = false
+    @State private var availableMicrophones: [AudioInputDevice] = []
+    @State private var availableSpeakers: [(uid: String, name: String)] = []
+    @State private var showMicrophonePrioritySheet = false
+    @State private var draftMicrophonePriorityEntries: [AudioInputDevicePreferenceEntry] = []
 
     typealias TestStatus = SettingsTestStatus
 
@@ -1215,38 +43,92 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
             SettingsSectionHeader(
                 label: "GENERAL",
                 title: L("通用设置", "General Settings"),
-                description: L("接口配置与偏好设置。快捷键请在「处理模式」中配置。", "API configuration and preferences. Hotkeys are configured in Modes.")
+                description: L("偏好设置与系统权限。快捷键请在「处理模式」中配置。", "Preferences and permissions. Hotkeys are configured in Modes.")
             )
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // MODULE 1: 全局设置 (全宽卡片，内部双列)
+            // CARD 1: 录音设置
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            settingsGroupCard(L("偏好", "Global Preferences"), icon: "slider.horizontal.3") {
-                // Row 1: 三等分 - 提示音 / 录音动效 / 界面语言
+            settingsGroupCard(L("录音设置", "Recording"), icon: "mic.fill") {
+                // Row 1: 麦克风 / 降低音量
                 HStack(alignment: .top, spacing: 16) {
-                    startSoundRow
+                    microphoneSelectionRow
                         .frame(maxWidth: .infinity)
-                    visualStyleRow
-                        .frame(maxWidth: .infinity)
-                    languageRow
+                    volumeReductionRow
                         .frame(maxWidth: .infinity)
                 }
 
                 SettingsDivider()
 
-                // Row 2: 两等分 - 开机启动 / 降低音量
+                // Row 2: 录音动效 / 麦克风保活
                 HStack(alignment: .top, spacing: 16) {
-                    launchAtLoginRow
+                    visualStyleRow
                         .frame(maxWidth: .infinity)
-                    volumeReductionRow
-                        .frame(maxWidth: .infinity)
-                    escAbortRow
+                    micKeepAliveRow
                         .frame(maxWidth: .infinity)
                 }
             }
 
             Spacer().frame(height: 16)
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // CARD 2: 语音识别设置
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            settingsGroupCard(L("语音识别设置", "Speech Recognition"), icon: "waveform") {
+                // Row 1: 提示音 / 提示音输出
+                HStack(alignment: .top, spacing: 16) {
+                    startSoundRow
+                        .frame(maxWidth: .infinity)
+                    speakerSelectionRow
+                        .frame(maxWidth: .infinity)
+                }
+
+                SettingsDivider()
+
+                // Row 2: 去句末标点 / 中英文空格 / 悬停文字预览
+                HStack(alignment: .top, spacing: 16) {
+                    stripPunctuationRow
+                        .frame(maxWidth: .infinity)
+                    cjkLatinSpacingRow
+                        .frame(maxWidth: .infinity)
+                    hoverPreviewRow
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            Spacer().frame(height: 16)
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // CARD 2: 系统集成
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+            settingsGroupCard(L("系统集成", "System Integration"), icon: "gearshape.2") {
+                // Row 1: 开机启动 / Dock图标
+                HStack(alignment: .top, spacing: 16) {
+                    launchAtLoginRow
+                        .frame(maxWidth: .infinity)
+                    dockIconRow
+                        .frame(maxWidth: .infinity)
+                }
+
+                SettingsDivider()
+
+                // Row 2: 剪贴板 / 界面语言
+                HStack(alignment: .top, spacing: 16) {
+                    preserveClipboardRow
+                        .frame(maxWidth: .infinity)
+                    languageRow
+                        .frame(maxWidth: .infinity)
+                }
+            }
+
+            Spacer().frame(height: 16)
+
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            // CARD 3: 系统权限
+            // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
             settingsGroupCard(
                 L("系统权限", "Permissions"),
@@ -1291,22 +173,60 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
             Spacer().frame(height: 16)
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // MODULE 2: API 设置 (上下结构)
+            // CARD 4: 高级设置
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-            ASRSettingsCard()
-
-            Spacer().frame(height: 16)
-
-            LLMSettingsCard()
+            settingsGroupCard(L("高级设置", "Advanced"), icon: "wrench.and.screwdriver") {
+                // 绕过系统代理
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("绕过系统代理", "Bypass System Proxy").uppercased())
+                        .font(.system(size: 10, weight: .semibold))
+                        .tracking(0.8)
+                        .foregroundStyle(TF.settingsTextTertiary)
+                    settingsDropdown(
+                        selection: $bypassProxy,
+                        options: [
+                            ("off", L("关闭", "Off")),
+                            ("all", L("全局绕过", "All Connections")),
+                            ("asr", L("语音识别绕过", "ASR Only")),
+                            ("llm", L("文本处理 LLM 绕过", "LLM Only")),
+                        ]
+                    )
+                    Text(L("不经过代理软件，直连对应服务器", "Connect directly to servers, bypassing proxy"))
+                        .font(.system(size: 10))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                }
+                .padding(.vertical, 6)
+            }
 
         }
         .task {
             checkPermissions()
             syncLoginItemState()
+            refreshMicrophones()
+            refreshSpeakers()
         }
         .onChange(of: launchAtLogin) { _, newValue in
             setLoginItem(enabled: newValue)
+        }
+        .onChange(of: micKeepAlive) { _, _ in
+            AudioKeepAliveManager.syncMicState()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .audioInputDevicesDidChange)) { _ in
+            refreshMicrophones()
+        }
+        .sheet(isPresented: $showMicrophonePrioritySheet) {
+            MicrophonePrioritySheet(
+                devices: availableMicrophones,
+                initialEntries: draftMicrophonePriorityEntries,
+                onCancel: {
+                    showMicrophonePrioritySheet = false
+                },
+                onSave: { entries in
+                    saveMicrophonePriority(entries)
+                    showMicrophonePrioritySheet = false
+                }
+            )
         }
     }
 
@@ -1397,13 +317,9 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(TF.settingsTextTertiary)
-            settingsSegmentedPicker(
+            settingsDropdown(
                 selection: $visualStyle,
-                options: [
-                    ("classic", L("线条", "Lines")),
-                    ("dual", L("粒子云", "Blocks")),
-                    ("timeline", L("电平", "Minimal")),
-                ]
+                options: RecordingVisualStyle.allCases.map { ($0.rawValue, $0.displayName) }
             )
         }
         .padding(.vertical, 6)
@@ -1454,20 +370,343 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
         .padding(.vertical, 6)
     }
 
-    private var escAbortRow: some View {
+    private var stripPunctuationRow: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L("ESC 打断录音", "ESC to Abort").uppercased())
+            Text(L("去句末标点", "Strip Trailing Punctuation").uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(TF.settingsTextTertiary)
+            settingsDropdown(
+                selection: $stripTrailingPunctuation,
+                options: [
+                    ("off", L("不去掉", "Off")),
+                    ("period", L("去掉句号", "Periods Only")),
+                    ("all", L("去掉所有标点", "All Punctuation")),
+                ]
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var cjkLatinSpacingRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("中英文空格", "CJK-Latin Spacing").uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(TF.settingsTextTertiary)
             settingsDropdown(
                 selection: Binding(
-                    get: { escAbortEnabled ? "on" : "off" },
-                    set: { escAbortEnabled = $0 == "on" }
+                    get: { preserveCJKLatinSpacing ? "on" : "off" },
+                    set: { preserveCJKLatinSpacing = $0 == "on" }
+                ),
+                options: [
+                    ("on", L("保留", "Keep")),
+                    ("off", L("去掉", "Strip")),
+                ]
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var hoverPreviewRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L("悬停文字预览", "Hover Text Preview").uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(TF.settingsTextTertiary)
+            settingsDropdown(
+                selection: Binding(
+                    get: { hoverTranscriptPreview ? "on" : "off" },
+                    set: { hoverTranscriptPreview = $0 == "on" }
                 ),
                 options: [
                     ("on", L("开启", "On")),
                     ("off", L("关闭", "Off")),
+                ]
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var microphoneSelectionRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(L("麦克风", "Microphone").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text("|")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
+                Text(L("选择音频输入设备", "Select audio input device"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Spacer()
+                Button {
+                    refreshMicrophones()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .help(L("刷新麦克风列表", "Refresh microphone list"))
+            }
+
+            microphonePreferenceDropdown
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func refreshMicrophones() {
+        let devices = AudioCaptureEngine.availableAudioInputDevices()
+        availableMicrophones = devices
+        AudioInputDeviceMonitor.shared.replaceCachedDevices(devices)
+    }
+
+    private var microphonePreferenceDropdown: some View {
+        Menu {
+            Button {
+                setMicrophoneSystemDefault()
+            } label: {
+                Label(
+                    L("跟随系统", "Follow System"),
+                    systemImage: microphonePreference == .systemDefault ? "checkmark" : "gearshape"
+                )
+            }
+
+            if microphonePriorityEntries.isEmpty {
+                Button {
+                    openMicrophonePrioritySheet()
+                } label: {
+                    Label(L("指定优先级", "Set Priority"), systemImage: "list.number")
+                }
+            } else {
+                Divider()
+                Button {
+                    microphonePreferenceMode = AudioInputDevicePreferenceMode.priority.rawValue
+                } label: {
+                    Label(
+                        microphonePriorityMenuLabel,
+                        systemImage: microphonePreference == .priority ? "checkmark" : "list.number"
+                    )
+                }
+                Button {
+                    openMicrophonePrioritySheet()
+                } label: {
+                    Label(L("修改优先级", "Edit Priority"), systemImage: "slider.horizontal.3")
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: microphonePreference == .priority ? "list.number" : "gearshape")
+                    .font(.system(size: 12))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text(microphonePreferenceLabel)
+                    .font(.system(size: 13))
+                    .foregroundStyle(TF.settingsText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(TF.settingsCardAlt)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var microphonePreference: AudioInputDevicePreferenceMode {
+        AudioInputDevicePreferenceMode(rawValue: microphonePreferenceMode) ?? .systemDefault
+    }
+
+    private var microphonePriorityEntries: [AudioInputDevicePreferenceEntry] {
+        AudioInputDevicePreferenceStore.priorityEntries(from: microphonePriorityEntriesStorage)
+    }
+
+    private var microphonePreferenceLabel: String {
+        guard microphonePreference == .priority, !microphonePriorityEntries.isEmpty else {
+            return L("跟随系统", "Follow System")
+        }
+        return L("当前优先级：\(microphonePrioritySummary)",
+                 "Priority: \(microphonePrioritySummary)")
+    }
+
+    private var microphonePriorityMenuLabel: String {
+        L("使用当前优先级", "Use Current Priority")
+    }
+
+    private var microphonePrioritySummary: String {
+        let names = microphonePriorityEntries.map { displayName(for: $0) }
+        let visibleNames = Array(names.prefix(2))
+        let hiddenCount = max(0, names.count - visibleNames.count)
+        let hiddenSummary = hiddenCount > 0 ? [L("另 \(hiddenCount) 个", "\(hiddenCount) more")] : []
+        return (visibleNames + hiddenSummary + [L("跟随系统", "System")]).joined(separator: L("、", ", "))
+    }
+
+    private func openMicrophonePrioritySheet() {
+        refreshMicrophones()
+        let currentEntries = refreshedPriorityEntries(microphonePriorityEntries)
+        draftMicrophonePriorityEntries = currentEntries.isEmpty
+            ? availableMicrophones.map { AudioInputDevicePreferenceEntry(uid: $0.uid, name: $0.name) }
+            : currentEntries
+        showMicrophonePrioritySheet = true
+    }
+
+    private func refreshedPriorityEntries(
+        _ entries: [AudioInputDevicePreferenceEntry]
+    ) -> [AudioInputDevicePreferenceEntry] {
+        entries.map { entry in
+            guard let device = availableMicrophones.first(where: { $0.uid == entry.uid }) else {
+                return entry
+            }
+            return AudioInputDevicePreferenceEntry(uid: entry.uid, name: device.name)
+        }
+    }
+
+    private func displayName(for entry: AudioInputDevicePreferenceEntry) -> String {
+        availableMicrophones.first(where: { $0.uid == entry.uid })?.name ?? entry.name
+    }
+
+    private func saveMicrophonePriority(_ entries: [AudioInputDevicePreferenceEntry]) {
+        let storage = AudioInputDevicePreferenceStore.storageValue(for: entries)
+        guard !storage.isEmpty else {
+            microphonePreferenceMode = AudioInputDevicePreferenceMode.systemDefault.rawValue
+            microphonePriorityEntriesStorage = ""
+            return
+        }
+        microphonePreferenceMode = AudioInputDevicePreferenceMode.priority.rawValue
+        microphonePriorityEntriesStorage = storage
+    }
+
+    private func setMicrophoneSystemDefault() {
+        microphonePreferenceMode = AudioInputDevicePreferenceMode.systemDefault.rawValue
+    }
+
+    private var speakerSelectionRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(L("提示音输出", "Alert Output").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text("|")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
+                Text(L("选择提示音播放设备", "Select alert sound device"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Spacer()
+                Button {
+                    refreshSpeakers()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 10))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                }
+                .buttonStyle(.plain)
+                .help(L("刷新输出设备列表", "Refresh output device list"))
+            }
+            settingsDropdown(
+                selection: $selectedSpeakerUID,
+                options: [("", L("系统默认", "System Default"))] + availableSpeakers.map { ($0.uid, $0.name) }
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func refreshSpeakers() {
+        availableSpeakers = SoundFeedback.availableOutputDevices()
+        if !selectedSpeakerUID.isEmpty,
+           !availableSpeakers.contains(where: { $0.uid == selectedSpeakerUID }) {
+            selectedSpeakerUID = ""
+        }
+    }
+
+    private var micKeepAliveRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(L("麦克风保活", "Mic Keep-Alive").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text("|")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
+                Text(L("防止蓝牙麦克风断开", "Prevent BT mic disconnect"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            settingsDropdown(
+                selection: Binding(
+                    get: { micKeepAlive ? "on" : "off" },
+                    set: { micKeepAlive = $0 == "on" }
+                ),
+                options: [
+                    ("on", L("开启", "On")),
+                    ("off", L("关闭", "Off")),
+                ]
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var preserveClipboardRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(L("注入剪贴板", "Copy to Clipboard").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text("|")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
+                Text(L("开启后始终写入剪贴板", "Always copy to clipboard"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            settingsDropdown(
+                selection: Binding(
+                    get: { preserveClipboard ? "off" : "on" },
+                    set: { preserveClipboard = $0 != "on" }
+                ),
+                options: [
+                    ("on", L("开启", "On")),
+                    ("off", L("关闭", "Off")),
+                ]
+            )
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var dockIconRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(L("DOCK 图标", "Dock Icon").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundStyle(TF.settingsTextTertiary)
+                Text("|")
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary.opacity(0.5))
+                Text(L("隐藏后仅保留菜单栏", "Menu bar only when hidden"))
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+            settingsDropdown(
+                selection: Binding(
+                    get: { showDockIcon ? "on" : "off" },
+                    set: { showDockIcon = $0 == "on" }
+                ),
+                options: [
+                    ("on", L("显示", "Show")),
+                    ("off", L("隐藏", "Hide")),
                 ]
             )
         }
@@ -1568,6 +807,229 @@ struct GeneralSettingsTab: View, SettingsCardHelpers {
             setLoginItem(enabled: true)
         } else {
             launchAtLogin = status == .enabled
+        }
+    }
+}
+
+private struct MicrophonePrioritySheet: View {
+    let devices: [AudioInputDevice]
+    let initialEntries: [AudioInputDevicePreferenceEntry]
+    let onCancel: () -> Void
+    let onSave: ([AudioInputDevicePreferenceEntry]) -> Void
+
+    @State private var orderedEntries: [AudioInputDevicePreferenceEntry]
+
+    init(
+        devices: [AudioInputDevice],
+        initialEntries: [AudioInputDevicePreferenceEntry],
+        onCancel: @escaping () -> Void,
+        onSave: @escaping ([AudioInputDevicePreferenceEntry]) -> Void
+    ) {
+        self.devices = devices
+        self.initialEntries = initialEntries
+        self.onCancel = onCancel
+        self.onSave = onSave
+        _orderedEntries = State(initialValue: initialEntries)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    Text(L("麦克风优先级", "Microphone Priority"))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(TF.settingsText)
+                    Spacer()
+                    Label(L("末尾跟随系统", "System fallback"), systemImage: "gearshape")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(TF.settingsCardAlt.opacity(0.75)))
+                }
+
+                Text(L("点一行加入或移除，箭头调整顺序。",
+                       "Click a row to add or remove it; use arrows to reorder."))
+                    .font(.system(size: 11))
+                    .foregroundStyle(TF.settingsTextTertiary)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 5) {
+                    if allEntries.isEmpty {
+                        Text(L("当前没有可用输入设备。", "No input devices are currently available."))
+                            .font(.system(size: 12))
+                            .foregroundStyle(TF.settingsTextTertiary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                    } else {
+                        ForEach(allEntries) { entry in
+                            deviceRow(entry)
+                        }
+                    }
+                }
+                .padding(6)
+            }
+            .frame(height: listHeight)
+            .background(RoundedRectangle(cornerRadius: 10).fill(TF.settingsCardAlt.opacity(0.35)))
+
+            HStack(spacing: 10) {
+                Text(selectionFooterText)
+                    .font(.system(size: 10))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                    .lineLimit(1)
+                Spacer()
+                Button(L("取消", "Cancel"), action: onCancel)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TF.settingsText)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(TF.settingsCardAlt))
+
+                Button {
+                    onSave(orderedEntries)
+                } label: {
+                    Text(L("保存", "Save"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(orderedEntries.isEmpty ? TF.settingsTextTertiary : TF.settingsAccentAmber)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(orderedEntries.isEmpty)
+            }
+        }
+        .padding(16)
+        .frame(width: 460)
+        .background(TF.settingsBg)
+    }
+
+    private var allEntries: [AudioInputDevicePreferenceEntry] {
+        var result = orderedEntries
+        for device in devices where !result.contains(where: { $0.uid == device.uid }) {
+            result.append(AudioInputDevicePreferenceEntry(uid: device.uid, name: device.name))
+        }
+        return result
+    }
+
+    private var listHeight: CGFloat {
+        guard !allEntries.isEmpty else {
+            return 52
+        }
+        let visibleRows = min(allEntries.count, 5)
+        let rowHeight: CGFloat = 40
+        let rowSpacing: CGFloat = 5
+        let verticalPadding: CGFloat = 12
+        return CGFloat(visibleRows) * rowHeight
+            + CGFloat(max(visibleRows - 1, 0)) * rowSpacing
+            + verticalPadding
+    }
+
+    private var selectionFooterText: String {
+        L("已选 \(orderedEntries.count) 个，最后自动跟随系统",
+          "\(orderedEntries.count) selected, then system fallback")
+    }
+
+    private func deviceRow(_ entry: AudioInputDevicePreferenceEntry) -> some View {
+        let selectedIndex = orderedEntries.firstIndex(where: { $0.uid == entry.uid })
+        let device = devices.first { $0.uid == entry.uid }
+        return HStack(spacing: 8) {
+            HStack(spacing: 8) {
+                if let selectedIndex {
+                    Text("\(selectedIndex + 1)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(TF.settingsNavActive))
+                } else {
+                    Image(systemName: "circle")
+                        .font(.system(size: 13))
+                        .foregroundStyle(TF.settingsTextTertiary)
+                        .frame(width: 22, height: 22)
+                }
+
+                Text(device?.name ?? entry.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(TF.settingsText)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Text(device.map { $0.category.displayName } ?? L("未连接", "Offline"))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(TF.settingsTextTertiary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(TF.settingsBg.opacity(0.72)))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                toggleEntry(entry)
+            }
+
+            if let selectedIndex {
+                HStack(spacing: 2) {
+                    iconButton("chevron.up", disabled: selectedIndex == 0) {
+                        moveEntry(from: selectedIndex, by: -1)
+                    }
+                    iconButton("chevron.down", disabled: selectedIndex == orderedEntries.count - 1) {
+                        moveEntry(from: selectedIndex, by: 1)
+                    }
+                    iconButton("minus.circle", disabled: false) {
+                        orderedEntries.remove(at: selectedIndex)
+                    }
+                }
+            } else {
+                iconButton("plus.circle", disabled: false) {
+                    toggleEntry(entry)
+                }
+            }
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(selectedIndex == nil ? TF.settingsCardAlt.opacity(0.72) : TF.settingsCardAlt)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(selectedIndex == nil ? Color.clear : TF.settingsNavActive.opacity(0.22), lineWidth: 1)
+        )
+    }
+
+    private func iconButton(_ systemName: String, disabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(disabled ? TF.settingsTextTertiary.opacity(0.4) : TF.settingsTextTertiary)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    private func moveEntry(from index: Int, by offset: Int) {
+        let newIndex = index + offset
+        guard orderedEntries.indices.contains(index), orderedEntries.indices.contains(newIndex) else {
+            return
+        }
+        let entry = orderedEntries.remove(at: index)
+        orderedEntries.insert(entry, at: newIndex)
+    }
+
+    private func toggleEntry(_ entry: AudioInputDevicePreferenceEntry) {
+        if let index = orderedEntries.firstIndex(where: { $0.uid == entry.uid }) {
+            orderedEntries.remove(at: index)
+        } else {
+            orderedEntries.append(entry)
         }
     }
 }

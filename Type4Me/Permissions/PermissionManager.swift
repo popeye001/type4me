@@ -1,5 +1,6 @@
 import AVFoundation
 import Cocoa
+import Speech
 
 // The actual value of kAXTrustedCheckOptionPrompt.
 // Accessed as a literal to avoid Swift 6 concurrency errors
@@ -7,6 +8,8 @@ import Cocoa
 private nonisolated(unsafe) let axTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt" as CFString
 
 enum PermissionManager {
+
+    // MARK: - Microphone
 
     static var hasMicrophonePermission: Bool {
         AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
@@ -23,6 +26,30 @@ enum PermissionManager {
             return false
         }
     }
+
+    // MARK: - Speech Recognition
+
+    static var hasSpeechRecognitionPermission: Bool {
+        SFSpeechRecognizer.authorizationStatus() == .authorized
+    }
+
+    static func requestSpeechRecognitionPermission() async -> Bool {
+        let status = SFSpeechRecognizer.authorizationStatus()
+        switch status {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus == .authorized)
+                }
+            }
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Accessibility
 
     static var hasAccessibilityPermission: Bool {
         AXIsProcessTrustedWithOptions(
@@ -46,6 +73,7 @@ enum PermissionManager {
 
     static func printPermissionStatus() {
         print("[Permissions] Microphone: \(hasMicrophonePermission ? "granted" : "NOT granted")")
+        print("[Permissions] Speech Recognition: \(hasSpeechRecognitionPermission ? "granted" : "NOT granted")")
         print("[Permissions] Accessibility: \(hasAccessibilityPermission ? "granted" : "NOT granted")")
     }
 }

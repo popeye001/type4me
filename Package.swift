@@ -6,22 +6,32 @@ let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().pat
 let hasSherpaFramework = FileManager.default.fileExists(
     atPath: packageDir + "/Frameworks/sherpa-onnx.xcframework/Info.plist"
 )
+let hasCloudSubscription = FileManager.default.fileExists(
+    atPath: packageDir + "/Type4Me/CloudSubscription/marker"
+)
+
+var swiftDefines: [SwiftSetting] = [.swiftLanguageMode(.v5)]
+if hasSherpaFramework { swiftDefines.append(.define("HAS_SHERPA_ONNX")) }
+if hasCloudSubscription { swiftDefines.append(.define("HAS_CLOUD_SUBSCRIPTION")) }
+
+var excludes = ["Resources"]
+if !hasCloudSubscription { excludes.append("CloudSubscription") }
 
 var targets: [Target] = [
     .executableTarget(
         name: "Type4Me",
         dependencies: hasSherpaFramework ? ["SherpaOnnxLib"] : [],
         path: "Type4Me",
-        exclude: ["Resources"],
+        exclude: excludes,
         cSettings: hasSherpaFramework ? [.headerSearchPath("Bridge")] : [],
-        swiftSettings: [
-            .swiftLanguageMode(.v5),
-        ] + (hasSherpaFramework ? [.define("HAS_SHERPA_ONNX")] : []),
-        linkerSettings: hasSherpaFramework ? [
+        swiftSettings: swiftDefines,
+        linkerSettings: (hasSherpaFramework ? [
             .linkedLibrary("c++"),
             .linkedFramework("Accelerate"),
             .linkedFramework("Foundation"),
-        ] : []
+        ] : []) + [
+            .linkedFramework("MediaPlayer"),
+        ]
     ),
     .testTarget(
         name: "Type4MeTests",
@@ -40,5 +50,6 @@ if hasSherpaFramework {
 let package = Package(
     name: "Type4Me",
     platforms: [.macOS(.v14)],
+    dependencies: [],
     targets: targets
 )

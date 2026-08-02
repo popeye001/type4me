@@ -32,7 +32,9 @@ actor HistoryStore {
                 processed_text TEXT,
                 final_text TEXT NOT NULL,
                 status TEXT NOT NULL,
-                character_count INTEGER
+                character_count INTEGER,
+                asr_provider TEXT,
+                asr_model TEXT
             );
             """
             sqlite3_exec(db, sql, nil, nil, nil)
@@ -40,6 +42,17 @@ actor HistoryStore {
             // Migration: add character_count column if it doesn't exist (for existing databases)
             let alterSQL = "ALTER TABLE recognition_history ADD COLUMN character_count INTEGER;"
             sqlite3_exec(db, alterSQL, nil, nil, nil)
+
+            // Migration: add asr_provider column if it doesn't exist
+            let alterASRSQL = "ALTER TABLE recognition_history ADD COLUMN asr_provider TEXT;"
+            sqlite3_exec(db, alterASRSQL, nil, nil, nil)
+
+            // Migration: add asr_model column if it doesn't exist
+            let alterASRModelSQL = "ALTER TABLE recognition_history ADD COLUMN asr_model TEXT;"
+            sqlite3_exec(db, alterASRModelSQL, nil, nil, nil)
+
+            // Index for ORDER BY created_at DESC pagination
+            sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_history_created_at ON recognition_history(created_at DESC);", nil, nil, nil)
         }
     }
 
@@ -48,8 +61,8 @@ actor HistoryStore {
     func insert(_ record: HistoryRecord) {
         let sql = """
         INSERT OR REPLACE INTO recognition_history
-        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
@@ -69,9 +82,53 @@ actor HistoryStore {
         } else {
             sqlite3_bind_null(stmt, 9)
         }
+        bindOptional(stmt, 10, record.asrProvider)
+        bindOptional(stmt, 11, record.asrModel)
         if sqlite3_step(stmt) == SQLITE_DONE {
             postDidChangeNotification()
         }
+    }
+
+    /// Persist the latest streaming transcript before final injection.
+    ///
+    /// These rows intentionally use status `interrupted`. A clean completion
+    /// replaces the same row through `insert(_:)`; after a crash, the most
+    /// recent recognized chunk is already visible in History. The conflict
+    /// guard prevents a delayed checkpoint from overwriting a completed row.
+    func upsertInterrupted(_ record: HistoryRecord) {
+        let sql = """
+        INSERT INTO recognition_history
+        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'interrupted', ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            duration_seconds = excluded.duration_seconds,
+            raw_text = excluded.raw_text,
+            final_text = excluded.final_text,
+            character_count = excluded.character_count,
+            asr_provider = excluded.asr_provider,
+            asr_model = excluded.asr_model
+        WHERE recognition_history.status = 'interrupted';
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        let iso = ISO8601DateFormatter()
+        bind(stmt, 1, record.id)
+        bind(stmt, 2, iso.string(from: record.createdAt))
+        sqlite3_bind_double(stmt, 3, record.durationSeconds)
+        bind(stmt, 4, record.rawText)
+        bindOptional(stmt, 5, record.processingMode)
+        bindOptional(stmt, 6, record.processedText)
+        bind(stmt, 7, record.finalText)
+        if let count = record.characterCount {
+            sqlite3_bind_int(stmt, 8, Int32(count))
+        } else {
+            sqlite3_bind_null(stmt, 8)
+        }
+        bindOptional(stmt, 9, record.asrProvider)
+        bindOptional(stmt, 10, record.asrModel)
+        sqlite3_step(stmt)
     }
 
     func fetchAll(limit: Int? = nil, offset: Int = 0) -> [HistoryRecord] {
@@ -81,10 +138,45 @@ actor HistoryStore {
         } else {
             sql = "SELECT * FROM recognition_history ORDER BY created_at DESC;"
         }
+        return executeQuery(sql)
+    }
+
+    /// Cursor-based pagination with optional date range filter.
+    /// Pass `cursor` for subsequent pages, `from`/`to` as ISO8601 strings for date filtering.
+    func fetchPage(limit: Int, before cursor: String? = nil, from: String? = nil, to: String? = nil) -> [HistoryRecord] {
+        var conditions: [String] = []
+        var params: [String] = []
+        if let cursor {
+            conditions.append("created_at < ?")
+            params.append(cursor)
+        }
+        if let from {
+            conditions.append("created_at >= ?")
+            params.append(from)
+        }
+        if let to {
+            conditions.append("created_at < ?")
+            params.append(to)
+        }
+        let whereClause = conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
+        let sql = "SELECT * FROM recognition_history \(whereClause) ORDER BY created_at DESC LIMIT \(limit);"
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
         defer { sqlite3_finalize(stmt) }
+        for (i, param) in params.enumerated() {
+            bind(stmt, Int32(i + 1), param)
+        }
+        return readRows(stmt)
+    }
 
+    private func executeQuery(_ sql: String) -> [HistoryRecord] {
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+        return readRows(stmt)
+    }
+
+    private func readRows(_ stmt: OpaquePointer?) -> [HistoryRecord] {
         let iso = ISO8601DateFormatter()
         var records: [HistoryRecord] = []
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -97,22 +189,52 @@ actor HistoryStore {
                 processedText: optionalColumn(stmt, 5),
                 finalText: column(stmt, 6),
                 status: column(stmt, 7),
-                characterCount: sqlite3_column_type(stmt, 8) == SQLITE_NULL ? nil : Int(sqlite3_column_int(stmt, 8))
+                characterCount: sqlite3_column_type(stmt, 8) == SQLITE_NULL ? nil : Int(sqlite3_column_int(stmt, 8)),
+                asrProvider: optionalColumn(stmt, 9),
+                asrModel: optionalColumn(stmt, 10)
             ))
         }
         return records
     }
 
-    func count(from start: Date? = nil, to end: Date? = nil) -> Int {
-        var sql = "SELECT COUNT(*) FROM recognition_history"
+    /// Fetch recent records with non-empty rawText for smart correction UI.
+    func recentForCorrection(limit: Int = 20) -> [(id: String, date: Date, rawText: String)] {
+        let sql = """
+        SELECT id, created_at, raw_text FROM recognition_history
+        WHERE raw_text != '' AND status = 'completed'
+        ORDER BY created_at DESC LIMIT \(limit);
+        """
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
         let iso = ISO8601DateFormatter()
-        if let start, let end {
-            sql += " WHERE created_at >= '\(iso.string(from: start))' AND created_at < '\(iso.string(from: end))'"
+        var results: [(id: String, date: Date, rawText: String)] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            results.append((
+                id: column(stmt, 0),
+                date: iso.date(from: column(stmt, 1)) ?? Date(),
+                rawText: column(stmt, 2)
+            ))
         }
-        sql += ";"
+        return results
+    }
+
+    func count(from start: Date? = nil, to end: Date? = nil) -> Int {
+        let sql: String
+        if start != nil && end != nil {
+            sql = "SELECT COUNT(*) FROM recognition_history WHERE created_at >= ? AND created_at < ?;"
+        } else {
+            sql = "SELECT COUNT(*) FROM recognition_history;"
+        }
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
         defer { sqlite3_finalize(stmt) }
+        if let start, let end {
+            let iso = ISO8601DateFormatter()
+            bind(stmt, 1, iso.string(from: start))
+            bind(stmt, 2, iso.string(from: end))
+        }
         return sqlite3_step(stmt) == SQLITE_ROW ? Int(sqlite3_column_int(stmt, 0)) : 0
     }
 
@@ -124,6 +246,41 @@ actor HistoryStore {
         bind(stmt, 1, id)
         if sqlite3_step(stmt) == SQLITE_DONE {
             postDidChangeNotification()
+        }
+    }
+
+    /// Deletes multiple rows in one transaction; posts a single change notification on success.
+    func delete(ids: [String]) {
+        guard !ids.isEmpty else { return }
+        let chunkSize = 500
+        guard sqlite3_exec(db, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK else { return }
+        var ok = true
+        for chunkStart in stride(from: 0, to: ids.count, by: chunkSize) {
+            let chunk = Array(ids[chunkStart ..< min(chunkStart + chunkSize, ids.count)])
+            let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+            let sql = "DELETE FROM recognition_history WHERE id IN (\(placeholders));"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                ok = false
+                break
+            }
+            defer { sqlite3_finalize(stmt) }
+            for (idx, id) in chunk.enumerated() {
+                bind(stmt, Int32(idx + 1), id)
+            }
+            if sqlite3_step(stmt) != SQLITE_DONE {
+                ok = false
+                break
+            }
+        }
+        if ok {
+            if sqlite3_exec(db, "COMMIT", nil, nil, nil) == SQLITE_OK {
+                postDidChangeNotification()
+            } else {
+                sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            }
+        } else {
+            sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
         }
     }
 
@@ -182,23 +339,44 @@ actor HistoryStore {
         }
     }
 
-    /// 获取全部记录的统计信息（使用数据库聚合查询，高效）
-    func getStatistics() async -> Statistics {
-        // Only sum duration for rows that have character_count, so averageSpeed
-        // is accurate even if some legacy rows haven't been migrated yet.
+    struct UsageBreakdown: Identifiable, Sendable {
+        let modelName: String
+        let lastDayDuration: Double
+        let last7DaysDuration: Double
+        let last30DaysDuration: Double
+        let recordCount: Int
+
+        var id: String { modelName }
+    }
+
+    /// 获取统计信息，可选日期范围过滤（ISO8601 字符串）
+    func getStatistics(from: String? = nil, to: String? = nil) async -> Statistics {
+        var conditions: [String] = []
+        var params: [String] = []
+        if let from {
+            conditions.append("created_at >= ?")
+            params.append(from)
+        }
+        if let to {
+            conditions.append("created_at < ?")
+            params.append(to)
+        }
+        let whereClause = conditions.isEmpty ? "" : "WHERE " + conditions.joined(separator: " AND ")
         let sql = """
         SELECT
             COALESCE(SUM(CASE WHEN character_count IS NOT NULL THEN duration_seconds ELSE 0 END), 0),
             COALESCE(SUM(character_count), 0),
             COUNT(*)
-        FROM recognition_history;
+        FROM recognition_history \(whereClause);
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
             return Statistics(totalDuration: 0, totalCharacters: 0, recordCount: 0)
         }
         defer { sqlite3_finalize(stmt) }
-
+        for (i, param) in params.enumerated() {
+            bind(stmt, Int32(i + 1), param)
+        }
         if sqlite3_step(stmt) == SQLITE_ROW {
             let duration = sqlite3_column_double(stmt, 0)
             let chars = Int(sqlite3_column_int(stmt, 1))
@@ -206,6 +384,47 @@ actor HistoryStore {
             return Statistics(totalDuration: duration, totalCharacters: chars, recordCount: count)
         }
         return Statistics(totalDuration: 0, totalCharacters: 0, recordCount: 0)
+    }
+
+    func getUsageBreakdown(now: Date = Date()) async -> [UsageBreakdown] {
+        let iso = ISO8601DateFormatter()
+        let lastDay = iso.string(from: now.addingTimeInterval(-24 * 60 * 60))
+        let last7Days = iso.string(from: now.addingTimeInterval(-7 * 24 * 60 * 60))
+        let last30Days = iso.string(from: now.addingTimeInterval(-30 * 24 * 60 * 60))
+        let unknown = L("未知模型/引擎", "Unknown model/engine")
+
+        let sql = """
+        SELECT
+            COALESCE(NULLIF(asr_model, ''), NULLIF(asr_provider, ''), ?) AS model_name,
+            COALESCE(SUM(CASE WHEN created_at >= ? THEN duration_seconds ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN created_at >= ? THEN duration_seconds ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN created_at >= ? THEN duration_seconds ELSE 0 END), 0),
+            COUNT(*)
+        FROM recognition_history
+        GROUP BY 1
+        ORDER BY 4 DESC, 2 DESC, model_name COLLATE NOCASE ASC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        defer { sqlite3_finalize(stmt) }
+
+        bind(stmt, 1, unknown)
+        bind(stmt, 2, lastDay)
+        bind(stmt, 3, last7Days)
+        bind(stmt, 4, last30Days)
+
+        var rows: [UsageBreakdown] = []
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            rows.append(UsageBreakdown(
+                modelName: column(stmt, 0),
+                lastDayDuration: sqlite3_column_double(stmt, 1),
+                last7DaysDuration: sqlite3_column_double(stmt, 2),
+                last30DaysDuration: sqlite3_column_double(stmt, 3),
+                recordCount: Int(sqlite3_column_int(stmt, 4))
+            ))
+        }
+        return rows
     }
 
     // MARK: - SQLite Helpers

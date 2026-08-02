@@ -3,21 +3,12 @@ import os
 
 enum SonioxASRError: Error, LocalizedError, Equatable {
     case unsupportedProvider
-    case handshakeTimedOut
-    case closedBeforeSessionStart(code: Int, reason: String?)
     case serverRejected(code: Int, message: String)
 
     var errorDescription: String? {
         switch self {
         case .unsupportedProvider:
             return "SonioxASRClient requires SonioxASRConfig"
-        case .handshakeTimedOut:
-            return "Soniox WebSocket handshake timed out"
-        case .closedBeforeSessionStart(let code, let reason):
-            if let reason, !reason.isEmpty {
-                return "Soniox WebSocket closed before session start (\(code)): \(reason)"
-            }
-            return "Soniox WebSocket closed before session start (\(code))"
         case .serverRejected(let code, let message):
             return "Soniox request failed (\(code)): \(message)"
         }
@@ -34,8 +25,6 @@ actor SonioxASRClient: SpeechRecognizer {
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
     private var session: URLSession?
-    private var sessionDelegate: SonioxWebSocketDelegate?
-    private var connectionGate: SonioxConnectionGate?
 
     private var eventContinuation: AsyncStream<RecognitionEvent>.Continuation?
     private var _events: AsyncStream<RecognitionEvent>?
@@ -43,8 +32,10 @@ actor SonioxASRClient: SpeechRecognizer {
     private var accumulator = SonioxTranscriptAccumulator()
     private var lastTranscript: RecognitionTranscript = .empty
     private var audioPacketCount = 0
+    private var totalAudioBytes = 0
     private var didRequestEnd = false
-    private var didReceiveFinished = false
+    private var sessionStartTime: ContinuousClock.Instant?
+    private var lastTranscriptTime: ContinuousClock.Instant?
 
     var events: AsyncStream<RecognitionEvent> {
         if let existing = _events {
@@ -65,48 +56,44 @@ actor SonioxASRClient: SpeechRecognizer {
         eventContinuation = continuation
         _events = stream
 
-        let url = try SonioxProtocol.buildWebSocketURL()
-        let gate = SonioxConnectionGate()
-        let delegate = SonioxWebSocketDelegate(connectionGate: gate)
-        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        let url = try SonioxProtocol.buildWebSocketURL(override: options.cloudProxyURL)
+        let session = options.resolvedSession
         let task = session.webSocketTask(with: url)
         task.resume()
 
-        connectionGate = gate
-        sessionDelegate = delegate
         self.session = session
         webSocketTask = task
         accumulator = SonioxTranscriptAccumulator()
         lastTranscript = .empty
         audioPacketCount = 0
+        totalAudioBytes = 0
         didRequestEnd = false
-        didReceiveFinished = false
+        sessionStartTime = ContinuousClock.now
+        lastTranscriptTime = nil
 
         startReceiveLoop()
 
-        try await sendStartMessage(
-            SonioxProtocol.buildStartMessage(
-                config: sonioxConfig,
-                options: options
-            ),
-            over: task,
-            timeout: .seconds(5)
+        let message = try SonioxProtocol.buildStartMessage(
+            config: sonioxConfig,
+            options: options
         )
-        try await gate.waitForValidationWindow(timeout: .milliseconds(500))
-        logger.info("Soniox WebSocket connected")
+        NSLog("[Soniox] Sending start message")
+        try await task.send(.string(message))
+        NSLog("[Soniox] Start message sent OK")
     }
 
     func sendAudio(_ data: Data) async throws {
         guard let task = webSocketTask else { return }
-        audioPacketCount += 1
         try await task.send(.data(data))
+        audioPacketCount += 1
+        totalAudioBytes += data.count
     }
 
     func endAudio() async throws {
         guard let task = webSocketTask else { return }
         didRequestEnd = true
-        try await task.send(.string(SonioxProtocol.finalizeMessage(trailingSilenceMs: 300)))
         try await task.send(.string(""))
+        NSLog("[Soniox] Sent end-of-stream (sent %d packets, %d bytes)", audioPacketCount, totalAudioBytes)
     }
 
     func disconnect() {
@@ -114,20 +101,15 @@ actor SonioxASRClient: SpeechRecognizer {
         receiveTask = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
-        session?.invalidateAndCancel()
+        // Don't invalidate shared session — just release our reference
         session = nil
-        sessionDelegate = nil
-        connectionGate = nil
         eventContinuation?.finish()
         eventContinuation = nil
         _events = nil
-        accumulator = SonioxTranscriptAccumulator()
-        lastTranscript = .empty
-        audioPacketCount = 0
-        didRequestEnd = false
-        didReceiveFinished = false
-        logger.info("Soniox disconnected")
+        NSLog("[Soniox] Disconnected")
     }
+
+    // MARK: - Receive Loop
 
     private func startReceiveLoop() {
         receiveTask = Task { [weak self] in
@@ -141,35 +123,31 @@ actor SonioxASRClient: SpeechRecognizer {
                     case .none:
                         break
                     case .finished:
-                        await self.markFinished()
                         await self.emitEvent(.completed)
                         return
                     case .fatal(let error):
-                        await self.connectionGate?.markFailure(error)
                         await self.emitEvent(.error(error))
                         await self.emitEvent(.completed)
                         return
                     }
                 } catch {
-                    if Task.isCancelled {
-                        break
-                    }
+                    if Task.isCancelled { break }
 
-                    let didRequestEnd = await self.didRequestEnd
-                    let didReceiveFinished = await self.didReceiveFinished
-                    if didRequestEnd || didReceiveFinished {
-                        await self.emitEvent(.completed)
-                    } else {
-                        await self.connectionGate?.markFailure(error)
+                    if await self.didRequestEnd {
+                        NSLog("[Soniox] Treating socket close as normal end (sent %d packets)", await self.audioPacketCount)
+                    } else if await self.audioPacketCount == 0 {
+                        NSLog("[Soniox] Receive error before audio: %@", String(describing: error))
                         await self.emitEvent(.error(error))
-                        await self.emitEvent(.completed)
+                    } else {
+                        NSLog("[Soniox] Unexpected close during audio (sent %d packets): %@", await self.audioPacketCount, String(describing: error))
+                        await self.emitEvent(.error(error))
                     }
+                    await self.emitEvent(.completed)
                     break
                 }
             }
-
-            let continuation = await self.eventContinuation
-            continuation?.finish()
+            NSLog("[Soniox] Receive loop ended")
+            await self.eventContinuation?.finish()
         }
     }
 
@@ -191,26 +169,27 @@ actor SonioxASRClient: SpeechRecognizer {
                 return .none
             }
 
-            guard let event = try SonioxProtocol.parseServerEvent(from: data) else {
-                return .none
-            }
+            let result = try SonioxProtocol.parseServerMessage(from: data)
 
-            switch event {
-            case .transcript(let update):
-                applyTranscriptUpdate(update)
-                return .none
-
-            case .finished:
-                return .finished
-
-            case .error(let code, let message):
+            if let error = result.error {
                 return .fatal(
                     SonioxASRError.serverRejected(
-                        code: code,
-                        message: message
+                        code: error.code,
+                        message: error.message
                     )
                 )
             }
+
+            if let update = result.transcript {
+                applyTranscriptUpdate(update)
+            }
+
+            if result.isFinished {
+                NSLog("[Soniox] Session finished by server after %d packets", audioPacketCount)
+                return .finished
+            }
+
+            return .none
         } catch {
             return .fatal(error)
         }
@@ -221,30 +200,29 @@ actor SonioxASRClient: SpeechRecognizer {
         let transcript = accumulator.transcript
         guard transcript != lastTranscript else { return }
         lastTranscript = transcript
+
+        let now = ContinuousClock.now
+        let sinceStart = sessionStartTime.map { now - $0 } ?? .zero
+        let sinceLastUpdate = lastTranscriptTime.map { now - $0 } ?? .zero
+        lastTranscriptTime = now
+
+        let gapMs = Int(sinceLastUpdate.components.seconds * 1000
+            + sinceLastUpdate.components.attoseconds / 1_000_000_000_000_000)
+
+        DebugFileLogger.log("Soniox transcript +\(sinceStart) gap=\(gapMs)ms confirmed=\(transcript.confirmedSegments.count) partial=\(transcript.partialText.count) final=\(transcript.isFinal)")
+        NSLog(
+            "[Soniox] Transcript +%@ gap=%dms confirmed=%d partial=%d final=%@",
+            String(describing: sinceStart),
+            gapMs,
+            transcript.confirmedSegments.count,
+            transcript.partialText.count,
+            transcript.isFinal ? "yes" : "no"
+        )
+
         emitEvent(.transcript(transcript))
-    }
 
-    private func markFinished() {
-        didReceiveFinished = true
-    }
-
-    private func sendStartMessage(
-        _ message: String,
-        over task: URLSessionWebSocketTask,
-        timeout: Duration
-    ) async throws {
-        try await withThrowingTaskGroup(of: Void.self) { group in
-            group.addTask {
-                try await task.send(.string(message))
-            }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                throw SonioxASRError.handshakeTimedOut
-            }
-
-            let result: Void? = try await group.next()
-            group.cancelAll()
-            return result ?? ()
+        if transcript.isFinal, !transcript.authoritativeText.isEmpty {
+            NSLog("[Soniox] Final transcript received (%d chars)", transcript.authoritativeText.count)
         }
     }
 }
@@ -275,53 +253,5 @@ struct SonioxTranscriptAccumulator: Sendable {
 private extension SonioxASRClient {
     func emitEvent(_ event: RecognitionEvent) {
         eventContinuation?.yield(event)
-    }
-}
-
-private final class SonioxWebSocketDelegate: NSObject, URLSessionWebSocketDelegate, URLSessionTaskDelegate {
-
-    private let connectionGate: SonioxConnectionGate
-
-    init(connectionGate: SonioxConnectionGate) {
-        self.connectionGate = connectionGate
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didOpenWithProtocol protocol: String?
-    ) {
-        Task {
-            await connectionGate.markOpen()
-        }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        didCompleteWithError error: Error?
-    ) {
-        guard let error else { return }
-        Task {
-            await connectionGate.markFailure(error)
-        }
-    }
-
-    func urlSession(
-        _ session: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
-        reason: Data?
-    ) {
-        let reasonText = reason.flatMap { String(data: $0, encoding: .utf8) }
-        Task {
-            guard await !connectionGate.hasOpened else { return }
-            await connectionGate.markFailure(
-                SonioxASRError.closedBeforeSessionStart(
-                    code: Int(closeCode.rawValue),
-                    reason: reasonText
-                )
-            )
-        }
     }
 }

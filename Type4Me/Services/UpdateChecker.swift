@@ -6,8 +6,76 @@ struct UpdateInfo: Codable, Identifiable {
     let version: String
     let date: String
     let notes: String
+    let cloudDmgURL: String?
+    let cloudDmgSize: Int64?
+    let cloudDmgSHA256: String?
+    let localDmgURL: String?
+    let localDmgSize: Int64?
+    let localDmgSHA256: String?
 
     var id: String { version }
+
+    enum CodingKeys: String, CodingKey {
+        case version, date, notes
+        case cloudDmgURL = "cloud_dmg_url"
+        case cloudDmgSize = "cloud_dmg_size"
+        case cloudDmgSHA256 = "cloud_dmg_sha256"
+        case localDmgURL = "local_dmg_url"
+        case localDmgSize = "local_dmg_size"
+        case localDmgSHA256 = "local_dmg_sha256"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(String.self, forKey: .version)
+        date = try c.decode(String.self, forKey: .date)
+        notes = try c.decode(String.self, forKey: .notes)
+        cloudDmgURL = try c.decodeIfPresent(String.self, forKey: .cloudDmgURL)
+        cloudDmgSize = try c.decodeIfPresent(Int64.self, forKey: .cloudDmgSize)
+        cloudDmgSHA256 = try c.decodeIfPresent(String.self, forKey: .cloudDmgSHA256)
+        localDmgURL = try c.decodeIfPresent(String.self, forKey: .localDmgURL)
+        localDmgSize = try c.decodeIfPresent(Int64.self, forKey: .localDmgSize)
+        localDmgSHA256 = try c.decodeIfPresent(String.self, forKey: .localDmgSHA256)
+    }
+
+    /// Resolved cloud DMG download URL (explicit or fallback from version).
+    var resolvedDmgURL: URL {
+        downloadURL(isLocalInstallation: false)
+    }
+
+    func downloadURL(isLocalInstallation: Bool) -> URL {
+        if isLocalInstallation {
+            if let urlStr = localDmgURL, let url = URL(string: urlStr) { return url }
+            return Self.releaseAssetURL(version: version, suffix: "local-apple-silicon")
+        }
+        if let urlStr = cloudDmgURL, let url = URL(string: urlStr) { return url }
+        return Self.releaseAssetURL(version: version, suffix: "cloud")
+    }
+
+    func dmgSHA256(isLocalInstallation: Bool) -> String? {
+        isLocalInstallation ? localDmgSHA256 : cloudDmgSHA256
+    }
+
+    func dmgSize(isLocalInstallation: Bool) -> Int64? {
+        isLocalInstallation ? localDmgSize : cloudDmgSize
+    }
+
+    /// Human-readable download size (e.g. "23.5 MB")
+    var formattedSize: String? {
+        formattedSize(isLocalInstallation: false)
+    }
+
+    func formattedSize(isLocalInstallation: Bool) -> String? {
+        let size = dmgSize(isLocalInstallation: isLocalInstallation)
+        guard let size else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: size)
+    }
+
+    private static func releaseAssetURL(version: String, suffix: String) -> URL {
+        URL(string: "https://github.com/joewongjc/type4me/releases/download/v\(version)/Type4Me-v\(version)-\(suffix).dmg")!
+    }
 }
 
 struct UpdateManifest: Codable {
