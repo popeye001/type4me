@@ -18,6 +18,10 @@ final class AudioSessionJournal: @unchecked Sendable {
         var pcmBytes: Int
         var chunkCount: Int
         var status: String
+        var shadowStatus: String?
+        var shadowText: String?
+        var shadowError: String?
+        var shadowElapsedSeconds: Double?
     }
 
     enum JournalError: Error {
@@ -55,7 +59,11 @@ final class AudioSessionJournal: @unchecked Sendable {
             asrModel: asrModel,
             pcmBytes: 0,
             chunkCount: 0,
-            status: "recording"
+            status: "recording",
+            shadowStatus: nil,
+            shadowText: nil,
+            shadowError: nil,
+            shadowElapsedSeconds: nil
         )
 
         try FileManager.default.createDirectory(
@@ -132,6 +140,21 @@ final class AudioSessionJournal: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         updateStatusLocked(status)
+    }
+
+    func markShadowResult(_ output: AppleSpeechAnalyzerShadowSession.Output) {
+        lock.lock()
+        defer { lock.unlock() }
+        metadata.shadowStatus = output.status
+        metadata.shadowText = output.text.isEmpty ? nil : output.text
+        metadata.shadowError = output.errorDescription
+        metadata.shadowElapsedSeconds = output.elapsedSeconds
+        metadata.updatedAt = Date()
+        do {
+            try persistMetadataLocked()
+        } catch {
+            DebugFileLogger.log("audio journal shadow metadata failed session=\(sessionID): \(error)")
+        }
     }
 
     private func updateStatusLocked(_ status: String) {

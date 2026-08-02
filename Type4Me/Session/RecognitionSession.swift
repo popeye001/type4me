@@ -195,6 +195,7 @@ actor RecognitionSession {
     private var activeHistoryRecordID: String?
     private var activeHistoryCreatedAt: Date?
     private var activeAudioJournal: AudioSessionJournal?
+    private var activeAppleShadow: AppleSpeechAnalyzerShadowSession?
     private var lastHistoryCheckpointText = ""
     private var eventConsumptionTask: Task<Void, Never>?
     private var maxDurationTask: Task<Void, Never>?
@@ -402,6 +403,7 @@ actor RecognitionSession {
 
         let audioBuffer = AudioChunkBuffer()
         let audioJournal = prepareAudioJournal()
+        let appleShadow = prepareAppleShadow()
 
         speechDetected = false
         let levelHandler = self.onAudioLevel
@@ -418,6 +420,7 @@ actor RecognitionSession {
         audioEngine.onAudioChunk = { [weak self] data in
             guard self != nil else { return }
             audioJournal?.append(data)
+            appleShadow?.append(data)
             audioBuffer.append(data)
         }
 
@@ -437,6 +440,8 @@ actor RecognitionSession {
             NSLog("[Session] Audio engine start FAILED: %@", String(describing: error))
             DebugFileLogger.log("audio engine start failed: \(String(describing: error))")
             audioJournal?.finalize(status: "audio_start_failed")
+            appleShadow?.cancel()
+            activeAppleShadow = nil
             clearActiveHistoryCheckpoint()
             SoundFeedback.playError()
             await client.disconnect()
@@ -472,6 +477,7 @@ actor RecognitionSession {
             audioEngine.onAudioChunk = nil
             audioEngine.onAudioLevel = nil
             audioJournal?.finalize(status: "asr_connect_failed")
+            finishAppleShadow(journal: audioJournal)
             clearActiveHistoryCheckpoint()
             await client.disconnect()
             self.asrClient = nil
@@ -517,6 +523,7 @@ actor RecognitionSession {
         audioEngine.onAudioChunk = { [weak self] data in
             guard self != nil else { return }
             audioJournal?.append(data)
+            appleShadow?.append(data)
             if failureFlag?.failed == true { return }
             chunkCount += 1
             chunkContinuation.yield(data)
@@ -581,6 +588,8 @@ actor RecognitionSession {
         DebugFileLogger.log("cancelRecording: discarding session from state=\(state)")
         SystemVolumeManager.restore()
         activeAudioJournal?.finalize(status: "cancelled")
+        activeAppleShadow?.cancel()
+        activeAppleShadow = nil
         await discardActiveHistoryCheckpoint()
         await forceReset()
     }
@@ -688,6 +697,7 @@ actor RecognitionSession {
         audioEngine.stop()
         audioEngine.onAudioChunk = nil
         activeAudioJournal?.finalize(status: "captured")
+        finishAppleShadow(journal: activeAudioJournal)
         await finishAudioChunkPipeline()
         DebugFileLogger.log("stop: audio stopped +\(ContinuousClock.now - stopT0)")
         guard sessionGeneration == myGeneration else {
@@ -1453,6 +1463,8 @@ actor RecognitionSession {
     private func clearActiveHistoryCheckpoint() {
         activeHistoryRecordID = nil
         activeHistoryCreatedAt = nil
+        activeAppleShadow?.cancel()
+        activeAppleShadow = nil
         activeAudioJournal = nil
         lastHistoryCheckpointText = ""
     }
@@ -1476,6 +1488,32 @@ actor RecognitionSession {
             activeAudioJournal = nil
             DebugFileLogger.log("audio journal unavailable session=\(sessionID): \(error)")
             return nil
+        }
+    }
+
+    private func prepareAppleShadow() -> AppleSpeechAnalyzerShadowSession? {
+        guard activeProvider != .apple,
+              UserDefaults.standard.bool(forKey: "tf_enableAppleSpeechShadow")
+        else {
+            activeAppleShadow = nil
+            return nil
+        }
+        let shadow = AppleSpeechAnalyzerShadowSession(locale: Locale(identifier: "zh_CN"))
+        activeAppleShadow = shadow
+        DebugFileLogger.log("Apple SpeechAnalyzer shadow started")
+        return shadow
+    }
+
+    private func finishAppleShadow(journal: AudioSessionJournal?) {
+        guard let shadow = activeAppleShadow else { return }
+        activeAppleShadow = nil
+        Task.detached(priority: .utility) {
+            let output = await shadow.finish()
+            journal?.markShadowResult(output)
+            let elapsed = String(format: "%.2f", output.elapsedSeconds)
+            DebugFileLogger.log(
+                "Apple shadow finished status=\(output.status) chars=\(output.text.count) elapsed=\(elapsed)s"
+            )
         }
     }
 
@@ -1826,6 +1864,7 @@ actor RecognitionSession {
         audioEngine.onAudioChunk = nil
         audioEngine.onAudioLevel = nil
         activeAudioJournal?.finalize(status: "interrupted")
+        finishAppleShadow(journal: activeAudioJournal)
         await finishAudioChunkPipeline(timeout: .milliseconds(100))
 
         if let client = asrClient {

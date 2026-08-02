@@ -34,6 +34,7 @@ final class AudioSessionJournalTests: XCTestCase {
         XCTAssertEqual(metadata.pcmBytes, 9_600)
         XCTAssertEqual(metadata.chunkCount, 2)
         XCTAssertEqual(metadata.status, "completed")
+        XCTAssertNil(metadata.shadowText)
     }
 
     func testRecoveryRepairsInterruptedHeader() throws {
