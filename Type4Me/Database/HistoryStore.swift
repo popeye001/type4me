@@ -34,7 +34,9 @@ actor HistoryStore {
                 status TEXT NOT NULL,
                 character_count INTEGER,
                 asr_provider TEXT,
-                asr_model TEXT
+                asr_model TEXT,
+                audio_session_id TEXT,
+                audio_path TEXT
             );
             """
             sqlite3_exec(db, sql, nil, nil, nil)
@@ -51,6 +53,9 @@ actor HistoryStore {
             let alterASRModelSQL = "ALTER TABLE recognition_history ADD COLUMN asr_model TEXT;"
             sqlite3_exec(db, alterASRModelSQL, nil, nil, nil)
 
+            sqlite3_exec(db, "ALTER TABLE recognition_history ADD COLUMN audio_session_id TEXT;", nil, nil, nil)
+            sqlite3_exec(db, "ALTER TABLE recognition_history ADD COLUMN audio_path TEXT;", nil, nil, nil)
+
             // Index for ORDER BY created_at DESC pagination
             sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_history_created_at ON recognition_history(created_at DESC);", nil, nil, nil)
         }
@@ -61,8 +66,8 @@ actor HistoryStore {
     func insert(_ record: HistoryRecord) {
         let sql = """
         INSERT OR REPLACE INTO recognition_history
-        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model, audio_session_id, audio_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
@@ -84,6 +89,8 @@ actor HistoryStore {
         }
         bindOptional(stmt, 10, record.asrProvider)
         bindOptional(stmt, 11, record.asrModel)
+        bindOptional(stmt, 12, record.audioSessionID)
+        bindOptional(stmt, 13, record.audioPath)
         if sqlite3_step(stmt) == SQLITE_DONE {
             postDidChangeNotification()
         }
@@ -98,15 +105,17 @@ actor HistoryStore {
     func upsertInterrupted(_ record: HistoryRecord) {
         let sql = """
         INSERT INTO recognition_history
-        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'interrupted', ?, ?, ?)
+        (id, created_at, duration_seconds, raw_text, processing_mode, processed_text, final_text, status, character_count, asr_provider, asr_model, audio_session_id, audio_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'interrupted', ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             duration_seconds = excluded.duration_seconds,
             raw_text = excluded.raw_text,
             final_text = excluded.final_text,
             character_count = excluded.character_count,
             asr_provider = excluded.asr_provider,
-            asr_model = excluded.asr_model
+            asr_model = excluded.asr_model,
+            audio_session_id = excluded.audio_session_id,
+            audio_path = excluded.audio_path
         WHERE recognition_history.status = 'interrupted';
         """
         var stmt: OpaquePointer?
@@ -128,6 +137,8 @@ actor HistoryStore {
         }
         bindOptional(stmt, 9, record.asrProvider)
         bindOptional(stmt, 10, record.asrModel)
+        bindOptional(stmt, 11, record.audioSessionID)
+        bindOptional(stmt, 12, record.audioPath)
         sqlite3_step(stmt)
     }
 
@@ -191,7 +202,9 @@ actor HistoryStore {
                 status: column(stmt, 7),
                 characterCount: sqlite3_column_type(stmt, 8) == SQLITE_NULL ? nil : Int(sqlite3_column_int(stmt, 8)),
                 asrProvider: optionalColumn(stmt, 9),
-                asrModel: optionalColumn(stmt, 10)
+                asrModel: optionalColumn(stmt, 10),
+                audioSessionID: optionalColumn(stmt, 11),
+                audioPath: optionalColumn(stmt, 12)
             ))
         }
         return records

@@ -194,6 +194,7 @@ actor RecognitionSession {
     /// replaces it instead of creating a duplicate.
     private var activeHistoryRecordID: String?
     private var activeHistoryCreatedAt: Date?
+    private var activeAudioJournal: AudioSessionJournal?
     private var lastHistoryCheckpointText = ""
     private var eventConsumptionTask: Task<Void, Never>?
     private var maxDurationTask: Task<Void, Never>?
@@ -400,6 +401,7 @@ actor RecognitionSession {
         // This eliminates the ~1s perceived latency from connect().
 
         let audioBuffer = AudioChunkBuffer()
+        let audioJournal = prepareAudioJournal()
 
         speechDetected = false
         let levelHandler = self.onAudioLevel
@@ -415,6 +417,7 @@ actor RecognitionSession {
 
         audioEngine.onAudioChunk = { [weak self] data in
             guard self != nil else { return }
+            audioJournal?.append(data)
             audioBuffer.append(data)
         }
 
@@ -433,6 +436,8 @@ actor RecognitionSession {
         } catch {
             NSLog("[Session] Audio engine start FAILED: %@", String(describing: error))
             DebugFileLogger.log("audio engine start failed: \(String(describing: error))")
+            audioJournal?.finalize(status: "audio_start_failed")
+            clearActiveHistoryCheckpoint()
             SoundFeedback.playError()
             await client.disconnect()
             self.asrClient = nil
@@ -466,6 +471,8 @@ actor RecognitionSession {
             audioEngine.stop()
             audioEngine.onAudioChunk = nil
             audioEngine.onAudioLevel = nil
+            audioJournal?.finalize(status: "asr_connect_failed")
+            clearActiveHistoryCheckpoint()
             await client.disconnect()
             self.asrClient = nil
             state = .idle
@@ -509,6 +516,7 @@ actor RecognitionSession {
         let failureFlag = self.uploadFailureFlag
         audioEngine.onAudioChunk = { [weak self] data in
             guard self != nil else { return }
+            audioJournal?.append(data)
             if failureFlag?.failed == true { return }
             chunkCount += 1
             chunkContinuation.yield(data)
@@ -572,6 +580,7 @@ actor RecognitionSession {
         }
         DebugFileLogger.log("cancelRecording: discarding session from state=\(state)")
         SystemVolumeManager.restore()
+        activeAudioJournal?.finalize(status: "cancelled")
         await discardActiveHistoryCheckpoint()
         await forceReset()
     }
@@ -638,8 +647,11 @@ actor RecognitionSession {
             status: historyStatus,
             characterCount: message.count,
             asrProvider: activeProvider.displayName,
-            asrModel: currentASRModelLabel(for: activeProvider)
+            asrModel: currentASRModelLabel(for: activeProvider),
+            audioSessionID: activeAudioJournal?.sessionID,
+            audioPath: activeAudioJournal?.audioURL.path
         ))
+        activeAudioJournal?.markOutcome(historyStatus)
         clearActiveHistoryCheckpoint()
 
         onASREvent?(.macActionResult(message: message, status: status))
@@ -675,6 +687,7 @@ actor RecognitionSession {
         // Stop capture first so flushRemaining() can emit the tail audio chunk.
         audioEngine.stop()
         audioEngine.onAudioChunk = nil
+        activeAudioJournal?.finalize(status: "captured")
         await finishAudioChunkPipeline()
         DebugFileLogger.log("stop: audio stopped +\(ContinuousClock.now - stopT0)")
         guard sessionGeneration == myGeneration else {
@@ -703,6 +716,8 @@ actor RecognitionSession {
             }
             resetSpeculativeLLM()
             SystemVolumeManager.restore()
+            activeAudioJournal?.markOutcome("no_speech")
+            await discardActiveHistoryCheckpoint()
             return
         }
 
@@ -743,6 +758,8 @@ actor RecognitionSession {
                     }
                     resetSpeculativeLLM()
                     SystemVolumeManager.restore()
+                    activeAudioJournal?.markOutcome("decoder_empty")
+                    await discardActiveHistoryCheckpoint()
                     return
                 }
 
@@ -1157,8 +1174,11 @@ actor RecognitionSession {
                 status: status,
                 characterCount: finalText.count,
                 asrProvider: activeProvider.displayName,
-                asrModel: currentASRModelLabel(for: activeProvider)
+                asrModel: currentASRModelLabel(for: activeProvider),
+                audioSessionID: activeAudioJournal?.sessionID,
+                audioPath: activeAudioJournal?.audioURL.path
             ))
+            activeAudioJournal?.markOutcome(status)
             clearActiveHistoryCheckpoint()
             KeychainService.addASRUsage(seconds: duration)
 
@@ -1170,6 +1190,7 @@ actor RecognitionSession {
             // No text recognized: skip history entry (don't save empty records)
             let duration = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
             DebugFileLogger.log("stop: no text recognized (duration=\(duration)s), skipping history entry")
+            activeAudioJournal?.markOutcome("decoder_empty")
             await discardActiveHistoryCheckpoint()
             onASREvent?(.processingResult(text: ""))
             onASREvent?(.completed)
@@ -1382,8 +1403,12 @@ actor RecognitionSession {
         hasEmittedReadyForCurrentSession = true
         let now = Date()
         recordingStartTime = now
-        activeHistoryRecordID = UUID().uuidString
-        activeHistoryCreatedAt = now
+        if activeHistoryRecordID == nil {
+            activeHistoryRecordID = UUID().uuidString
+        }
+        if activeHistoryCreatedAt == nil {
+            activeHistoryCreatedAt = now
+        }
         lastHistoryCheckpointText = ""
         DebugFileLogger.log("session emitting ready")
         onASREvent?(.ready)
@@ -1411,7 +1436,9 @@ actor RecognitionSession {
             status: "interrupted",
             characterCount: text.count,
             asrProvider: activeProvider.displayName,
-            asrModel: currentASRModelLabel(for: activeProvider)
+            asrModel: currentASRModelLabel(for: activeProvider),
+            audioSessionID: activeAudioJournal?.sessionID,
+            audioPath: activeAudioJournal?.audioURL.path
         ))
         DebugFileLogger.log("history checkpoint chars=\(text.count)")
     }
@@ -1426,7 +1453,30 @@ actor RecognitionSession {
     private func clearActiveHistoryCheckpoint() {
         activeHistoryRecordID = nil
         activeHistoryCreatedAt = nil
+        activeAudioJournal = nil
         lastHistoryCheckpointText = ""
+    }
+
+    private func prepareAudioJournal() -> AudioSessionJournal? {
+        let createdAt = Date()
+        let sessionID = UUID().uuidString
+        activeHistoryRecordID = sessionID
+        activeHistoryCreatedAt = createdAt
+        do {
+            let journal = try AudioSessionJournal(
+                sessionID: sessionID,
+                createdAt: createdAt,
+                asrProvider: activeProvider.displayName,
+                asrModel: currentASRModelLabel(for: activeProvider)
+            )
+            activeAudioJournal = journal
+            DebugFileLogger.log("audio journal started session=\(sessionID) path=\(journal.audioURL.path)")
+            return journal
+        } catch {
+            activeAudioJournal = nil
+            DebugFileLogger.log("audio journal unavailable session=\(sessionID): \(error)")
+            return nil
+        }
     }
 
     // MARK: - Speculative LLM
@@ -1775,6 +1825,7 @@ actor RecognitionSession {
         audioEngine.stop()
         audioEngine.onAudioChunk = nil
         audioEngine.onAudioLevel = nil
+        activeAudioJournal?.finalize(status: "interrupted")
         await finishAudioChunkPipeline(timeout: .milliseconds(100))
 
         if let client = asrClient {

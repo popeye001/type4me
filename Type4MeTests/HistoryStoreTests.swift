@@ -20,7 +20,8 @@ final class HistoryStoreTests: XCTestCase {
         let record = HistoryRecord(
             id: UUID().uuidString, createdAt: Date(), durationSeconds: 3.5,
             rawText: "测试文本", processingMode: nil, processedText: nil,
-            finalText: "测试文本", status: "completed", characterCount: 4, asrProvider: nil
+            finalText: "测试文本", status: "completed", characterCount: 4, asrProvider: nil,
+            audioSessionID: "audio-session", audioPath: "/tmp/audio-session.wav"
         )
         await store.insert(record)
         let all = await store.fetchAll()
@@ -28,6 +29,8 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(all.first?.rawText, "测试文本")
         XCTAssertEqual(all.first?.durationSeconds ?? 0, 3.5, accuracy: 0.01)
         XCTAssertEqual(all.first?.characterCount, 4)
+        XCTAssertEqual(all.first?.audioSessionID, "audio-session")
+        XCTAssertEqual(all.first?.audioPath, "/tmp/audio-session.wav")
     }
 
     func testInsertWithProcessedText() async {

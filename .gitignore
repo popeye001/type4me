@@ -11,6 +11,7 @@ dist/
 xcuserdata/
 .vscode/
 .claude/
+.context/
 
 # macOS
 .DS_Store

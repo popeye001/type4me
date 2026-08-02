@@ -14,6 +14,8 @@ struct HistoryRecord: Identifiable, Hashable {
     let characterCount: Int?
     let asrProvider: String?
     let asrModel: String?
+    let audioSessionID: String?
+    let audioPath: String?
 
     init(
         id: String,
@@ -26,7 +28,9 @@ struct HistoryRecord: Identifiable, Hashable {
         status: String,
         characterCount: Int?,
         asrProvider: String?,
-        asrModel: String? = nil
+        asrModel: String? = nil,
+        audioSessionID: String? = nil,
+        audioPath: String? = nil
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -39,6 +43,8 @@ struct HistoryRecord: Identifiable, Hashable {
         self.characterCount = characterCount
         self.asrProvider = asrProvider
         self.asrModel = asrModel
+        self.audioSessionID = audioSessionID
+        self.audioPath = audioPath
     }
 }
 
