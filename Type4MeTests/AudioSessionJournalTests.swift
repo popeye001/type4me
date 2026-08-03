@@ -18,6 +18,7 @@ final class AudioSessionJournalTests: XCTestCase {
         journal.append(Data(repeating: 0x11, count: 6_400))
         journal.append(Data(repeating: 0x22, count: 3_200))
         journal.finalize(status: "completed")
+        journal.finalize(status: "interrupted")
 
         let wav = try Data(contentsOf: journal.audioURL)
         XCTAssertEqual(wav.count, 44 + 9_600)

@@ -58,10 +58,6 @@ final class AppleSpeechAnalyzerShadowSession: @unchecked Sendable {
         guard SpeechTranscriber.isAvailable else {
             return output(status: "unavailable", startedAt: startedAt)
         }
-        guard PermissionManager.hasSpeechRecognitionPermission else {
-            return output(status: "permission_missing", startedAt: startedAt)
-        }
-
         guard let locale = await SpeechTranscriber.supportedLocale(
             equivalentTo: requestedLocale
         ) else {

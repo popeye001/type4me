@@ -118,7 +118,6 @@ final class AudioSessionJournal: @unchecked Sendable {
         defer { lock.unlock() }
 
         if finalized {
-            updateStatusLocked(status)
             return
         }
         finalized = true

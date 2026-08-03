@@ -1,0 +1,143 @@
+--- localvoice_streaming_server.py.pre-full-recovery-20260803	2026-08-02 23:11:14
++++ localvoice_streaming_server.py	2026-08-03 15:05:11
+@@ -165,6 +165,29 @@
+ def _meaningful_text_length(text: str) -> int:
+     """Count text progress without mistaking final punctuation for new words."""
+     return len(text.rstrip("。！？!?;；，,、：:\"'“”‘’（）()《》【】 "))
++
++
++def _normalized_for_repetition(text: str) -> str:
++    """Remove presentation marks before checking decoder time-line repeats."""
++    return "".join(
++        char
++        for char in str(text or "")
++        if not char.isspace() and char not in "。！？!?;；，,、：:\"'“”‘’（）()《》【】"
++    )
++
++
++def _looks_like_repeated_append(before: str, after: str) -> bool:
++    """Detect a chunk that appends an earlier phrase instead of new audio."""
++    if not after.startswith(before) or len(after) <= len(before):
++        return False
++    prior = _normalized_for_repetition(before)
++    addition = _normalized_for_repetition(after[len(before) :])
++    if len(addition) < 6 or len(prior) < 6:
++        return False
++    if addition in prior:
++        return True
++    longest = SequenceMatcher(None, prior, addition, autojunk=False).find_longest_match()
++    return longest.size / len(addition) >= 0.75
+ 
+ 
+ def _voiced_seconds(audio: np.ndarray) -> float:
+@@ -251,6 +274,7 @@
+     consecutive_stalled_chunks = 0
+     stalled_voiced_seconds = 0.0
+     recovered_stall_count = 0
++    repeated_append_count = 0
+     started_at = time.monotonic()
+ 
+     try:
+@@ -321,6 +345,17 @@
+                         _meaningful_text_length(stream_state.text)
+                         - _meaningful_text_length(text_before_feed)
+                     )
++                    if chunks_advanced > 0 and _looks_like_repeated_append(
++                        text_before_feed, stream_state.text
++                    ):
++                        repeated_append_count += 1
++                        logger.warning(
++                            "stream repeated append chunk=%d count=%d before_chars=%d after_chars=%d",
++                            stream_state.chunk_id,
++                            repeated_append_count,
++                            len(text_before_feed),
++                            len(stream_state.text),
++                        )
+                     if chunks_advanced > 0 and semantic_progress <= 0:
+                         consecutive_stalled_chunks += chunks_advanced
+ 
+@@ -430,6 +465,8 @@
+                 )
+                 refine_audio = stream_state.audio_accum[-refine_window_samples:].copy()
+                 finalize_started = time.monotonic()
++                full_retry = False
++                full_recovered = False
+                 async with app_state.inference_lock:
+                     stream_state = await asyncio.to_thread(
+                         app_state.session.finish_streaming, stream_state
+@@ -473,6 +510,50 @@
+                         ):
+                             stream_state.text = candidate
+                             stream_state.stable_text = candidate
++
++                    # A repeated voiced stall means the incremental KV cache
++                    # has stopped covering the recording. A bounded tail retry
++                    # can still fail when its overlap is too short to anchor the
++                    # merge. In that case, correctness wins over latency: run
++                    # the same local 0.6B model once on the complete audio with
++                    # a fresh cache and only replace the result if it recovers
++                    # materially more speech.
++                    full_retry = (
++                        finalization_mode == "accuracy"
++                        and (
++                            consecutive_stalled_chunks >= 2
++                            or stalled_voiced_seconds >= 2.0
++                            or repeated_append_count >= 2
++                        )
++                        and len(stream_state.audio_accum) > 0
++                    )
++                    if full_retry:
++                        recovered = await asyncio.to_thread(
++                            app_state.session.transcribe,
++                            stream_state.audio_accum.copy(),
++                            context=stream_state.context,
++                            language=(
++                                stream_state.language
++                                if stream_state.language != "unknown"
++                                else None
++                            ),
++                            max_new_tokens=stream_state.max_new_tokens,
++                            verbose=False,
++                        )
++                        recovered_text = str(recovered.text or "").strip()
++                        if (
++                            _meaningful_text_length(recovered_text)
++                            > _meaningful_text_length(stream_state.text)
++                        ):
++                            logger.warning(
++                                "stream full recovery replaced chars=%d with chars=%d after %d stalled chunks",
++                                len(stream_state.text),
++                                len(recovered_text),
++                                consecutive_stalled_chunks,
++                            )
++                            stream_state.text = recovered_text
++                            stream_state.stable_text = recovered_text
++                            full_recovered = True
+                 finalize_ms = round((time.monotonic() - finalize_started) * 1000)
+                 metrics = streaming_metrics(stream_state)
+                 await websocket.send_json(
+@@ -486,10 +567,13 @@
+                         "session_seconds": round(time.monotonic() - started_at, 3),
+                         "metrics": metrics,
+                         "stall_recoveries": recovered_stall_count,
++                        "full_retry": full_retry,
++                        "full_recovered": full_recovered,
++                        "repeated_appends": repeated_append_count,
+                     }
+                 )
+                 logger.info(
+-                    "stream final chunks=%d audio=%.2fs tail=%.2fs voiced=%.2fs finalize=%dms chars=%d delta=%d semantic_delta=%d retry=%s stall_recoveries=%d",
++                    "stream final chunks=%d audio=%.2fs tail=%.2fs voiced=%.2fs finalize=%dms chars=%d delta=%d semantic_delta=%d retry=%s full_retry=%s full_recovered=%s repeated_appends=%d stall_recoveries=%d",
+                     stream_state.chunk_id,
+                     audio_bytes / 32000.0,
+                     pending_tail_seconds,
+@@ -499,6 +583,9 @@
+                     len(stream_state.text) - len(text_before_finish),
+                     semantic_delta,
+                     tail_retry,
++                    full_retry,
++                    full_recovered,
++                    repeated_append_count,
+                     recovered_stall_count,
+                 )
+                 await websocket.close(code=1000)
