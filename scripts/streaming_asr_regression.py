@@ -102,11 +102,12 @@ def shadow_decision(primary: str, shadow: str) -> tuple[bool, float, float]:
     distance = (
         edit_distance(primary_text, shadow_text) / max(len(primary_text), len(shadow_text), 1)
     )
-    if len(shadow_text) < 8:
+    if len(shadow_text) < 4:
         return False, ratio, distance
+    minimum_ratio, maximum_ratio = (0.70, 1.40) if len(shadow_text) < 8 else (0.92, 1.12)
     should_retry = (
-        ratio < 0.92
-        or ratio > 1.12
+        ratio < minimum_ratio
+        or ratio > maximum_ratio
         or (max(len(primary_text), len(shadow_text)) >= 20 and distance > 0.32)
     )
     return should_retry, ratio, distance

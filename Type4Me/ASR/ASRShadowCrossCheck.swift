@@ -13,9 +13,11 @@ enum ASRShadowCrossCheck {
         let reason: String
     }
 
-    private static let minimumShadowCharacters = 8
+    private static let minimumShadowCharacters = 4
     private static let minimumLengthRatio = 0.92
     private static let maximumLengthRatio = 1.12
+    private static let shortMinimumLengthRatio = 0.70
+    private static let shortMaximumLengthRatio = 1.40
     private static let maximumNormalizedDistance = 0.32
 
     static func evaluate(primary: String, shadow: String) -> Decision {
@@ -39,10 +41,14 @@ enum ASRShadowCrossCheck {
             )
         }
 
+        let minimumRatio = shadowCount < 8
+            ? shortMinimumLengthRatio : minimumLengthRatio
+        let maximumRatio = shadowCount < 8
+            ? shortMaximumLengthRatio : maximumLengthRatio
         let reason: String
-        if ratio < minimumLengthRatio {
+        if ratio < minimumRatio {
             reason = "primary_missing_content"
-        } else if ratio > maximumLengthRatio {
+        } else if ratio > maximumRatio {
             reason = "primary_repeated_content"
         } else if max(primaryCount, shadowCount) >= 20,
                   distance > maximumNormalizedDistance {

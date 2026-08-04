@@ -28,6 +28,18 @@ enum ASRShadowCrossCheckSmoke {
                 "我们重复12345来测试",
                 false
             ),
+            (
+                "short missing tail",
+                "我录",
+                "我录好了",
+                true
+            ),
+            (
+                "short decimal formatting",
+                "你是豆包二点零吗",
+                "你是豆包2.0吗",
+                false
+            ),
         ]
 
         var failures: [String] = []

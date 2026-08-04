@@ -40,4 +40,24 @@ final class ASRShadowCrossCheckTests: XCTestCase {
 
         XCTAssertFalse(decision.shouldRetryWithFullAudio)
     }
+
+    func testRetriesShortUtteranceWithMissingTail() {
+        let decision = ASRShadowCrossCheck.evaluate(
+            primary: "我录",
+            shadow: "我录好了"
+        )
+
+        XCTAssertTrue(decision.shouldRetryWithFullAudio)
+        XCTAssertEqual(decision.reason, "primary_missing_content")
+    }
+
+    func testAcceptsShortDecimalFormattingDifference() {
+        let decision = ASRShadowCrossCheck.evaluate(
+            primary: "你是豆包二点零吗",
+            shadow: "你是豆包2.0吗"
+        )
+
+        XCTAssertFalse(decision.shouldRetryWithFullAudio)
+        XCTAssertEqual(decision.reason, "consistent")
+    }
 }

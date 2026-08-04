@@ -883,13 +883,17 @@ actor RecognitionSession {
         // dropping a whole middle section. Compare it with Apple's concurrent
         // local shadow transcript before text injection. Apple is only a
         // coverage judge; any disagreement is resolved by re-running Qwen with
-        // the complete recording, never by inserting Apple's wording.
+        // the complete recording. Apple's wording is used only as an emergency
+        // fallback if the known-bad stream cannot be repaired by REST.
         var shadowRequestedFullRetry = false
+        var completedShadowText: String?
+        var recoveryUsedAppleEmergencyFallback = false
         if provider == .openai,
            let openAIConfig = currentConfig as? OpenAIASRConfig,
            openAIConfig.model.lowercased().contains("qwen3-asr"),
            let shadowOutput = await appleShadowTask?.value,
            shadowOutput.status == "completed" {
+            completedShadowText = shadowOutput.text
             let decision = ASRShadowCrossCheck.evaluate(
                 primary: currentTranscript.displayText,
                 shadow: shadowOutput.text
@@ -934,6 +938,21 @@ actor RecognitionSession {
                         isFinal: true
                     )
                     DebugFileLogger.log("stop: full-audio retry succeeded, \(batchText.count) chars")
+                } else if shadowRequestedFullRetry,
+                          let shadowText = completedShadowText?
+                            .trimmingCharacters(in: .whitespacesAndNewlines),
+                          !shadowText.isEmpty {
+                    currentTranscript = RecognitionTranscript(
+                        confirmedSegments: [shadowText],
+                        partialText: "",
+                        authoritativeText: shadowText,
+                        isFinal: true
+                    )
+                    recoveryUsedAppleEmergencyFallback = true
+                    DebugFileLogger.log(
+                        "stop: full-audio retry failed, using Apple emergency result " +
+                        "(\(shadowText.count) chars)"
+                    )
                 } else {
                     DebugFileLogger.log("stop: full-audio retry failed, using streaming text")
                 }
@@ -1190,6 +1209,7 @@ actor RecognitionSession {
             let status: String
             if injectionAborted { status = "aborted" }
             else if llmFailed { status = "llm_error" }
+            else if recoveryUsedAppleEmergencyFallback { status = "shadow_recovered" }
             else if needsBatchFallback { status = "stream_recovered" }
             else { status = "completed" }
             await historyStore.insert(HistoryRecord(
@@ -1777,17 +1797,24 @@ actor RecognitionSession {
             )
             DebugFileLogger.log("batch fallback: using LocalVoice whole-file REST (\(audio.count) bytes)")
             let resultTask = Task.detached { () -> String? in
-                let client = OpenAIASRClient()
-                do {
-                    return try await client.transcribeFullAudio(
-                        pcmData: audio,
-                        config: openAIConfig,
-                        options: options
-                    )
-                } catch {
-                    DebugFileLogger.log("LocalVoice whole-file recovery error: \(error)")
-                    return nil
+                for attempt in 1...2 {
+                    let client = OpenAIASRClient()
+                    do {
+                        return try await client.transcribeFullAudio(
+                            pcmData: audio,
+                            config: openAIConfig,
+                            options: options
+                        )
+                    } catch {
+                        DebugFileLogger.log(
+                            "LocalVoice whole-file recovery attempt \(attempt) failed: \(error)"
+                        )
+                        if attempt == 1 {
+                            try? await Task.sleep(for: .milliseconds(300))
+                        }
+                    }
                 }
+                return nil
             }
             return await withCheckedContinuation { continuation in
                 let finished = OSAllocatedUnfairLock(initialState: false)
