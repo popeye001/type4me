@@ -349,6 +349,20 @@ actor OpenAIASRClient: SpeechRecognizer {
 
     // MARK: - Transcription API
 
+    /// Force one whole-file REST transcription even when this model normally
+    /// uses LocalVoice WebSocket streaming. Recovery must use a fresh decoder
+    /// pass over the complete recording; opening another streaming session can
+    /// reproduce the same dropped-middle failure it is meant to repair.
+    func transcribeFullAudio(
+        pcmData: Data,
+        config: OpenAIASRConfig,
+        options: ASRRequestOptions
+    ) async throws -> String {
+        guard !pcmData.isEmpty else { throw OpenAIASRError.emptyAudio }
+        requestOptions = options
+        return try await transcribe(wavData: Self.wavFromPCM(pcmData), config: config)
+    }
+
     private func transcribe(wavData: Data, config: OpenAIASRConfig) async throws -> String {
         guard let url = URL(string: "\(config.baseURL)/audio/transcriptions") else {
             throw OpenAIASRError.invalidConfig
@@ -378,7 +392,7 @@ actor OpenAIASRClient: SpeechRecognizer {
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await requestOptions.resolvedSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw OpenAIASRError.requestFailed(0)
         }

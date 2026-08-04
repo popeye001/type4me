@@ -697,7 +697,7 @@ actor RecognitionSession {
         audioEngine.stop()
         audioEngine.onAudioChunk = nil
         activeAudioJournal?.finalize(status: "captured")
-        finishAppleShadow(journal: activeAudioJournal)
+        let appleShadowTask = finishAppleShadow(journal: activeAudioJournal)
         await finishAudioChunkPipeline()
         DebugFileLogger.log("stop: audio stopped +\(ContinuousClock.now - stopT0)")
         guard sessionGeneration == myGeneration else {
@@ -871,8 +871,79 @@ actor RecognitionSession {
             }
         }
 
-        // Now that we have the final transcript, decide whether to reuse
-        // the speculative LLM result or fire a fresh request.
+        eventConsumptionTask = nil
+        asrClient = nil
+        hasEmittedReadyForCurrentSession = false
+        guard sessionGeneration == myGeneration else {
+            DebugFileLogger.log("stopRecording: zombie after ASR teardown, bailing")
+            return
+        }
+
+        // A streaming decoder can return fluent-looking text while silently
+        // dropping a whole middle section. Compare it with Apple's concurrent
+        // local shadow transcript before text injection. Apple is only a
+        // coverage judge; any disagreement is resolved by re-running Qwen with
+        // the complete recording, never by inserting Apple's wording.
+        var shadowRequestedFullRetry = false
+        if provider == .openai,
+           let openAIConfig = currentConfig as? OpenAIASRConfig,
+           openAIConfig.model.lowercased().contains("qwen3-asr"),
+           let shadowOutput = await appleShadowTask?.value,
+           shadowOutput.status == "completed" {
+            let decision = ASRShadowCrossCheck.evaluate(
+                primary: currentTranscript.displayText,
+                shadow: shadowOutput.text
+            )
+            shadowRequestedFullRetry = decision.shouldRetryWithFullAudio
+            DebugFileLogger.log(
+                "stop: Apple cross-check reason=\(decision.reason) retry=\(decision.shouldRetryWithFullAudio) " +
+                "primary=\(decision.primaryCharacterCount) shadow=\(decision.shadowCharacterCount) " +
+                "ratio=\(String(format: "%.3f", decision.lengthRatio)) " +
+                "distance=\(String(format: "%.3f", decision.normalizedDistance))"
+            )
+        }
+
+        let uploadFailed = uploadFailureFlag?.failed == true
+        let hasUsableStreamingResult = !currentTranscript.displayText
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let streamingFailed = Self.shouldAttemptBatchFallback(
+            uploadFailed: uploadFailed,
+            asrTeardownClean: asrTeardownClean,
+            streamingError: lastStreamingError
+        )
+        let transportRequestedFullRetry = streamingFailed
+            && (uploadFailed || lastStreamingError != nil || !hasUsableStreamingResult)
+        let needsBatchFallback = transportRequestedFullRetry || shadowRequestedFullRetry
+        if streamingFailed && !needsBatchFallback {
+            DebugFileLogger.log("stop: drain timeout but streaming has confirmed text, skipping batch fallback")
+        }
+        if needsBatchFallback {
+            let partialText = currentTranscript.composedText
+            DebugFileLogger.log(
+                "stop: full-audio retry requested (partial=\(partialText.count) chars, " +
+                "transport=\(transportRequestedFullRetry), shadow=\(shadowRequestedFullRetry))"
+            )
+            let fullAudio = audioEngine.getRecordedAudio()
+            if !fullAudio.isEmpty, let config = currentConfig {
+                onASREvent?(.processingResult(text: partialText.isEmpty ? "重新识别中..." : partialText))
+                if let batchText = await attemptBatchFallback(audio: fullAudio, config: config) {
+                    currentTranscript = RecognitionTranscript(
+                        confirmedSegments: [batchText],
+                        partialText: "",
+                        authoritativeText: batchText,
+                        isFinal: true
+                    )
+                    DebugFileLogger.log("stop: full-audio retry succeeded, \(batchText.count) chars")
+                } else {
+                    DebugFileLogger.log("stop: full-audio retry failed, using streaming text")
+                }
+            }
+        }
+        uploadFailureFlag = nil
+        lastStreamingError = nil
+
+        // Now that the transcript has passed the cross-check (and was repaired
+        // when necessary), decide whether to reuse the speculative LLM result.
         let canEarlyLLM = providerIsStreaming
         var earlyLLMTask: Task<String?, Never>?
         if needsLLM && canEarlyLLM {
@@ -927,58 +998,6 @@ actor RecognitionSession {
                 }
             }
         }
-        eventConsumptionTask = nil
-        asrClient = nil
-        hasEmittedReadyForCurrentSession = false
-        guard sessionGeneration == myGeneration else {
-            DebugFileLogger.log("stopRecording: zombie after ASR teardown, bailing")
-            return
-        }
-
-        // Batch fallback: only when the server is truly missing audio (upload failed).
-        // If upload was fine but drain timed out, the server already has all audio;
-        // use whatever streaming produced rather than re-sending everything.
-        let uploadFailed = uploadFailureFlag?.failed == true
-        // LocalVoice partials are authoritative replacements but intentionally
-        // remain in partialText until the server emits final. They are still a
-        // safe recovery result when finalization times out; checking only
-        // confirmedSegments incorrectly triggered an expensive whole-file retry.
-        let hasUsableStreamingResult = !currentTranscript.displayText
-            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let streamingFailed = Self.shouldAttemptBatchFallback(
-            uploadFailed: uploadFailed,
-            asrTeardownClean: asrTeardownClean,
-            streamingError: lastStreamingError
-        )
-        let needsBatchFallback = streamingFailed
-            && (uploadFailed || lastStreamingError != nil || !hasUsableStreamingResult)
-        if streamingFailed && !needsBatchFallback {
-            DebugFileLogger.log("stop: drain timeout but streaming has confirmed text, skipping batch fallback")
-        }
-        if needsBatchFallback {
-            let partialText = currentTranscript.composedText
-            DebugFileLogger.log(
-                "stop: streaming failed (partial=\(partialText.count) chars, uploadFailed=\(uploadFailed), hasStreamingError=\(lastStreamingError != nil)), attempting batch fallback"
-            )
-            let fullAudio = audioEngine.getRecordedAudio()
-            if !fullAudio.isEmpty, let config = currentConfig {
-                onASREvent?(.processingResult(text: partialText.isEmpty ? "重新识别中..." : partialText))
-                if let batchText = await attemptBatchFallback(audio: fullAudio, config: config) {
-                    currentTranscript = RecognitionTranscript(
-                        confirmedSegments: [batchText],
-                        partialText: "",
-                        authoritativeText: batchText,
-                        isFinal: true
-                    )
-                    DebugFileLogger.log("stop: batch fallback succeeded, \(batchText.count) chars")
-                } else {
-                    DebugFileLogger.log("stop: batch fallback failed, using partial text")
-                }
-            }
-        }
-        uploadFailureFlag = nil
-        lastStreamingError = nil
-
         // Combine confirmed segments + any trailing unconfirmed partial.
         let effectiveText = currentTranscript.displayText
         currentConfig = nil
@@ -1504,16 +1523,20 @@ actor RecognitionSession {
         return shadow
     }
 
-    private func finishAppleShadow(journal: AudioSessionJournal?) {
-        guard let shadow = activeAppleShadow else { return }
+    @discardableResult
+    private func finishAppleShadow(
+        journal: AudioSessionJournal?
+    ) -> Task<AppleSpeechAnalyzerShadowSession.Output, Never>? {
+        guard let shadow = activeAppleShadow else { return nil }
         activeAppleShadow = nil
-        Task.detached(priority: .utility) {
+        return Task.detached(priority: .utility) {
             let output = await shadow.finish()
             journal?.markShadowResult(output)
             let elapsed = String(format: "%.2f", output.elapsedSeconds)
             DebugFileLogger.log(
                 "Apple shadow finished status=\(output.status) chars=\(output.text.count) elapsed=\(elapsed)s"
             )
+            return output
         }
     }
 
@@ -1740,6 +1763,50 @@ actor RecognitionSession {
     /// Soniox uses its async REST API (faster for complete audio); others use a fresh streaming connection.
     private func attemptBatchFallback(audio: Data, config: any ASRProviderConfig) async -> String? {
         let provider = activeProvider
+
+        // LocalVoice/Qwen recovery must be a true whole-file REST pass with a
+        // fresh decoder cache. Re-opening its WebSocket stream can reproduce
+        // the same fluent-looking omission that triggered recovery.
+        if provider == .openai,
+           let openAIConfig = config as? OpenAIASRConfig,
+           openAIConfig.model.lowercased().contains("qwen3-asr") {
+            let options = ASRRequestOptions(
+                enablePunc: true,
+                hotwords: HotwordStorage.loadEffective(),
+                bypassProxy: ProxyBypassMode.current.bypassASR
+            )
+            DebugFileLogger.log("batch fallback: using LocalVoice whole-file REST (\(audio.count) bytes)")
+            let resultTask = Task.detached { () -> String? in
+                let client = OpenAIASRClient()
+                do {
+                    return try await client.transcribeFullAudio(
+                        pcmData: audio,
+                        config: openAIConfig,
+                        options: options
+                    )
+                } catch {
+                    DebugFileLogger.log("LocalVoice whole-file recovery error: \(error)")
+                    return nil
+                }
+            }
+            return await withCheckedContinuation { continuation in
+                let finished = OSAllocatedUnfairLock(initialState: false)
+                Task.detached {
+                    let result = await resultTask.value
+                    if finished.withLock({ let old = $0; $0 = true; return !old }) {
+                        continuation.resume(returning: result)
+                    }
+                }
+                Task.detached {
+                    try? await Task.sleep(for: .seconds(90))
+                    if finished.withLock({ let old = $0; $0 = true; return !old }) {
+                        resultTask.cancel()
+                        DebugFileLogger.log("LocalVoice whole-file recovery timeout after 90s")
+                        continuation.resume(returning: nil)
+                    }
+                }
+            }
+        }
 
         // Soniox: use async REST API instead of re-streaming
         if provider == .soniox, let sonioxConfig = config as? SonioxASRConfig {
