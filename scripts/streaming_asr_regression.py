@@ -35,12 +35,17 @@ class RunResult:
     normalized_text: str
     cer: float
     length_ratio: float
+    deletion_rate: float
+    largest_reference_gap: int
     elapsed_seconds: float
     audio_seconds: float
     repeated_appends: int
     full_retry: bool
     full_recovered: bool
     processing_ms: int
+    coverage_complete: bool
+    unresolved_audio_seconds: float
+    final_source: str
     raw_passed: bool
     shadow_retry: bool
     shadow_length_ratio: float | None
@@ -88,6 +93,26 @@ def cer(reference: str, candidate: str) -> float:
     if not reference:
         return 0.0 if not candidate else 1.0
     return edit_distance(reference, candidate) / len(reference)
+
+
+def deletion_diagnostics(reference: str, candidate: str) -> tuple[float, int]:
+    """Measure coverage loss separately from ordinary ASR substitutions."""
+    from difflib import SequenceMatcher
+
+    matcher = SequenceMatcher(None, reference, candidate, autojunk=False)
+    deleted = 0
+    largest_gap = 0
+    for tag, left_start, left_end, right_start, right_end in matcher.get_opcodes():
+        if tag == "delete":
+            gap = left_end - left_start
+        elif tag == "replace":
+            gap = max(0, (left_end - left_start) - (right_end - right_start))
+        else:
+            gap = 0
+        deleted += gap
+        largest_gap = max(largest_gap, gap)
+    rate = deleted / len(reference) if reference else 0.0
+    return rate, largest_gap
 
 
 def shadow_normalize(text: str) -> str:
@@ -150,6 +175,7 @@ async def stream_transcribe(
     api_key: str,
     pcm: bytes,
     pace: float,
+    args: argparse.Namespace,
 ) -> tuple[dict, float]:
     started = time.monotonic()
     async with websockets.connect(
@@ -158,32 +184,50 @@ async def stream_transcribe(
         max_size=None,
         open_timeout=15,
         close_timeout=15,
+        # Accelerated replay can queue minutes of audio while the server still
+        # performs every checkpoint serially. That is intentional stress, not
+        # a transport-idle failure; the Type4Me client does not use this Python
+        # library's 20-second automatic ping timeout.
+        ping_interval=None,
     ) as socket:
         await socket.send(json.dumps({
             "type": "start",
             "context": "",
-            "chunk_size_sec": 4.0,
-            "max_context_sec": 30.0,
+            "chunk_size_sec": args.chunk_size_sec,
+            "max_context_sec": args.max_context_sec,
             "finalization_mode": "accuracy",
             "endpointing_mode": "fixed",
+            "verification_stride_sec": args.verification_stride_sec,
+            "verification_overlap_sec": args.verification_overlap_sec,
         }))
         ready = json.loads(await socket.recv())
         if ready.get("type") != "ready":
             raise RuntimeError(f"stream did not become ready: {ready}")
 
-        frame_bytes = 6_400  # the app's 200ms PCM chunk
-        for offset in range(0, len(pcm), frame_bytes):
-            await socket.send(pcm[offset : offset + frame_bytes])
-            if pace > 0:
-                await asyncio.sleep(pace)
-        await socket.send(json.dumps({"type": "finish"}))
+        async def receive_final() -> dict:
+            while True:
+                result = json.loads(await socket.recv())
+                if result.get("type") == "error":
+                    raise RuntimeError(result.get("message") or "stream error")
+                if result.get("type") == "final":
+                    return result
 
-        while True:
-            result = json.loads(await socket.recv())
-            if result.get("type") == "error":
-                raise RuntimeError(result.get("message") or "stream error")
-            if result.get("type") == "final":
-                return result, time.monotonic() - started
+        # Type4Me sends microphone frames and receives partials concurrently.
+        # A send-all-then-receive test fills the WebSocket inbound queue after
+        # roughly 20 partials and creates a fake 60-80 second disconnect.
+        receiver = asyncio.create_task(receive_final())
+        try:
+            frame_bytes = 6_400  # the app's 200ms PCM chunk
+            for offset in range(0, len(pcm), frame_bytes):
+                await socket.send(pcm[offset : offset + frame_bytes])
+                if pace > 0:
+                    await asyncio.sleep(pace)
+            await socket.send(json.dumps({"type": "finish"}))
+            result = await receiver
+            return result, time.monotonic() - started
+        finally:
+            if not receiver.done():
+                receiver.cancel()
 
 
 def evaluate_run(
@@ -194,6 +238,9 @@ def evaluate_run(
     max_cer: float,
     min_length_ratio: float,
     shadow_text: str | None,
+    max_deletion_rate: float,
+    max_reference_gap: int,
+    max_finalize_seconds: float,
 ) -> RunResult:
     candidate = str(response.get("text") or "").strip()
     normalized_reference = normalize(reference)
@@ -203,6 +250,15 @@ def evaluate_run(
         len(normalized_candidate) / len(normalized_reference)
         if normalized_reference else 1.0
     )
+    deletion_rate, largest_reference_gap = deletion_diagnostics(
+        normalized_reference, normalized_candidate
+    )
+    verification = response.get("verification") or {}
+    coverage_complete = bool(response.get("coverage_complete"))
+    unresolved_audio_seconds = float(
+        verification.get("unresolved_audio_seconds") or 0
+    )
+    finalization_seconds = float(response.get("processing_ms") or 0) / 1000.0
     failures: list[str] = []
     if not normalized_candidate:
         failures.append("empty final transcript")
@@ -212,6 +268,24 @@ def evaluate_run(
         failures.append(
             f"length ratio {length_ratio:.3f} < {min_length_ratio:.3f}"
         )
+    if deletion_rate > max_deletion_rate:
+        failures.append(
+            f"deletion rate {deletion_rate:.3f} > {max_deletion_rate:.3f}"
+        )
+    if largest_reference_gap > max_reference_gap:
+        failures.append(
+            f"largest reference gap {largest_reference_gap} > {max_reference_gap}"
+        )
+    if not coverage_complete:
+        failures.append("server did not verify complete audio coverage")
+    if unresolved_audio_seconds > 0.01:
+        failures.append(
+            f"unresolved audio {unresolved_audio_seconds:.3f}s > 0.01s"
+        )
+    if finalization_seconds > max_finalize_seconds:
+        failures.append(
+            f"finalization {finalization_seconds:.3f}s > {max_finalize_seconds:.3f}s"
+        )
     raw_passed = not failures
     shadow_retry = False
     shadow_length_ratio = None
@@ -220,23 +294,28 @@ def evaluate_run(
         shadow_retry, shadow_length_ratio, shadow_distance = shadow_decision(
             candidate, shadow_text
         )
-    # The batch reference above is an actual fresh-cache, full-audio request to
-    # the same endpoint the client calls on retry. If the shadow requests that
-    # retry, the final result is therefore the reference and passes this gate.
-    recovered = shadow_retry and bool(normalized_reference)
-    final_failures = [] if recovered else failures
+    # Apple remains a useful independent diagnostic, but it must never turn a
+    # broken server result into a passing regression. The returned WebSocket
+    # final itself has to prove complete coverage.
+    recovered = False
+    final_failures = failures
     return RunResult(
         run=run_number,
         text=candidate,
         normalized_text=normalized_candidate,
         cer=error_rate,
         length_ratio=length_ratio,
+        deletion_rate=deletion_rate,
+        largest_reference_gap=largest_reference_gap,
         elapsed_seconds=elapsed,
         audio_seconds=float(response.get("audio_seconds") or 0),
         repeated_appends=int(response.get("repeated_appends") or 0),
         full_retry=bool(response.get("full_retry")),
         full_recovered=bool(response.get("full_recovered")),
         processing_ms=int(response.get("processing_ms") or 0),
+        coverage_complete=coverage_complete,
+        unresolved_audio_seconds=unresolved_audio_seconds,
+        final_source=str(response.get("final_source") or "unknown"),
         raw_passed=raw_passed,
         shadow_retry=shadow_retry,
         shadow_length_ratio=shadow_length_ratio,
@@ -264,7 +343,7 @@ async def run_case(
     runs: list[RunResult] = []
     for run_number in range(1, args.repeat + 1):
         response, elapsed = await stream_transcribe(
-            args.websocket_url, api_key, pcm, args.pace
+            args.websocket_url, api_key, pcm, args.pace, args
         )
         runs.append(evaluate_run(
             run_number,
@@ -274,6 +353,9 @@ async def run_case(
             args.max_cer,
             args.min_length_ratio,
             shadow_text,
+            args.max_deletion_rate,
+            args.max_reference_gap,
+            args.max_finalize_seconds,
         ))
 
     pairwise = [
@@ -306,6 +388,9 @@ def print_case(case: CaseResult) -> None:
     status = "PASS" if case.passed else "FAIL"
     run_summary = " ".join(
         f"r{run.run}:cer={run.cer:.3f},len={run.length_ratio:.2f},"
+        f"del={run.deletion_rate:.3f},gap={run.largest_reference_gap},"
+        f"coverage={int(run.coverage_complete)},tail={run.unresolved_audio_seconds:.1f}s,"
+        f"source={run.final_source},finalize={run.processing_ms / 1000:.2f}s,"
         f"server_retry={int(run.full_retry)},shadow_retry={int(run.shadow_retry)},"
         f"recovered={int(run.recovered_by_full_audio or run.full_recovered)}"
         for run in case.runs
@@ -373,7 +458,14 @@ async def main_async(args: argparse.Namespace) -> int:
             "max_cer": args.max_cer,
             "min_length_ratio": args.min_length_ratio,
             "max_variance_cer": args.max_variance_cer,
+            "max_deletion_rate": args.max_deletion_rate,
+            "max_reference_gap": args.max_reference_gap,
+            "max_finalize_seconds": args.max_finalize_seconds,
             "pace": args.pace,
+            "chunk_size_sec": args.chunk_size_sec,
+            "max_context_sec": args.max_context_sec,
+            "verification_stride_sec": args.verification_stride_sec,
+            "verification_overlap_sec": args.verification_overlap_sec,
             "model": args.model,
             "min_audio_seconds": args.min_audio_seconds,
             "apple_report": args.apple_report,
@@ -429,6 +521,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-cer", type=float, default=0.12)
     parser.add_argument("--min-length-ratio", type=float, default=0.88)
     parser.add_argument("--max-variance-cer", type=float, default=0.08)
+    parser.add_argument("--max-deletion-rate", type=float, default=0.05)
+    parser.add_argument("--max-reference-gap", type=int, default=8)
+    parser.add_argument("--max-finalize-seconds", type=float, default=5.0)
+    parser.add_argument("--chunk-size-sec", type=float, default=3.0)
+    parser.add_argument("--max-context-sec", type=float, default=120.0)
+    parser.add_argument("--verification-stride-sec", type=float, default=10.0)
+    parser.add_argument("--verification-overlap-sec", type=float, default=2.0)
     parser.add_argument("--min-audio-seconds", type=float, default=2.0)
     parser.add_argument(
         "--apple-report",

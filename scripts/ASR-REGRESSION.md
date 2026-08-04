@@ -25,10 +25,16 @@ server first, then run:
   --output ./streaming-asr-regression.json
 ```
 
-The command exits non-zero when any final result fails. The report keeps raw
-stream quality separate from client recovery: `raw_failed_cases` shows decoder
-failures, while `failed_cases` must be zero after the Apple cross-check and
-whole-file recovery policy are applied.
+The command exits non-zero when any WebSocket final fails. A run must prove
+`coverage_complete=true`, zero unresolved audio, bounded deletion rate and
+largest missing span, acceptable CER/length ratio, and bounded key-up
+finalization time. Apple is an independent diagnostic only; it can no longer
+turn a broken server final into a passing regression.
+
+The runner sends microphone frames and receives partials concurrently, matching
+the app. For recordings longer than one minute, use `--pace 0.2` for a true
+real-time transport test. Sending minutes of audio instantaneously is a separate
+queue-pressure test and must not be confused with ASR coverage.
 
 The client cross-check itself has a no-XCTest smoke gate for machines whose
 Command Line Tools do not ship the XCTest module:

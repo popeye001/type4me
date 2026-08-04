@@ -8,6 +8,7 @@ enum OpenAIASRError: Error, LocalizedError {
     case invalidResponse
     case invalidStreamingEndpoint
     case streamingHandshakeFailed
+    case incompleteStreamingCoverage
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,7 @@ enum OpenAIASRError: Error, LocalizedError {
         case .invalidResponse:   return "Failed to parse OpenAI transcription response"
         case .invalidStreamingEndpoint: return "Invalid LocalVoice streaming endpoint"
         case .streamingHandshakeFailed: return "LocalVoice streaming handshake failed"
+        case .incompleteStreamingCoverage: return "LocalVoice could not verify complete audio coverage"
         }
     }
 }
@@ -192,18 +194,20 @@ actor OpenAIASRClient: SpeechRecognizer {
         let start: [String: Any] = [
             "type": "start",
             "context": context,
-            "chunk_size_sec": 4.0,
-            // Bound decoder context so minute-long dictation does not become
-            // progressively slower or stall while retaining the accumulated text.
-            "max_context_sec": 30.0,
-            // Finish on the fast incremental path first. If the decoder sees
-            // the tail audio but produces no new text, accuracy mode retries
-            // only the final few seconds. The server pins that retry to the
-            // already-downloaded local model, so it never waits on the cloud.
+            // Three-second drafts were the most stable point in the saved-audio
+            // matrix. They are advisory; fresh-cache checkpoints own coverage.
+            "chunk_size_sec": 3.0,
+            // Checkpoints reset the experimental decoder cache every ten
+            // seconds. Keep a wider library context as a second safety margin.
+            "max_context_sec": 120.0,
+            // Accuracy mode verifies overlapping audio windows while recording
+            // and only decodes the remaining unverified tail after key-up.
             "finalization_mode": "accuracy",
             // Fixed chunks avoid an energy-endpoint tail decode occasionally
             // taking tens of seconds on long recordings.
             "endpointing_mode": "fixed",
+            "verification_stride_sec": 10.0,
+            "verification_overlap_sec": 2.0,
         ]
         let startData = try JSONSerialization.data(withJSONObject: start)
         guard let startText = String(data: startData, encoding: .utf8) else {
@@ -285,6 +289,18 @@ actor OpenAIASRClient: SpeechRecognizer {
 
         switch type {
         case "partial", "final":
+            if type == "final",
+               let coverageComplete = object["coverage_complete"] as? Bool,
+               !coverageComplete {
+                let verification = object["verification"] as? [String: Any]
+                let unresolved = verification?["unresolved_audio_seconds"] as? Double ?? -1
+                DebugFileLogger.log(
+                    "LocalVoice rejected unverified final unresolved=\(String(format: "%.1f", unresolved))s"
+                )
+                eventContinuation?.yield(.error(OpenAIASRError.incompleteStreamingCoverage))
+                eventContinuation?.yield(.completed)
+                return true
+            }
             let rawText = (object["text"] as? String ?? "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             let text = Qwen3HotwordLeakSanitizer.sanitize(
@@ -311,7 +327,8 @@ actor OpenAIASRClient: SpeechRecognizer {
             )
             eventContinuation?.yield(.transcript(transcript))
             if isFinal {
-                logger.info("LocalVoice final result: \(text.count) chars")
+                let source = object["final_source"] as? String ?? "legacy"
+                logger.info("LocalVoice final result: \(text.count) chars source=\(source, privacy: .public)")
                 eventContinuation?.yield(.completed)
                 return true
             }
